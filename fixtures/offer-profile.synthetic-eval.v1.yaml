@@ -1,0 +1,15 @@
+{
+  "version": "offer-profile.synthetic-eval.v1",
+  "locale": "ru",
+  "sendable": false,
+  "owner_approved": false,
+  "synthetic_eval": true,
+  "claims": [
+    {
+      "id": "synthetic-review-before-publish",
+      "text": "Синтетический инструмент помогает воспроизводимо проверять материалы перед публикацией."
+    }
+  ],
+  "forbidden_claims": ["production results", "guarantees"],
+  "notice": "SYNTHETIC EVAL ONLY"
+}

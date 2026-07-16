@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workoutreach.invalid/schemas/fact-extraction.v1.schema.json",
+  "title": "Workoutreach fact extraction v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["company_name", "fact", "source_id", "source_excerpt", "source_type", "published_at", "confidence", "decision", "warnings"],
+  "properties": {
+    "company_name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "fact": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "source_id": { "type": "string", "pattern": "^p[0-9]{2}$" },
+    "source_excerpt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "source_type": { "type": "string", "enum": ["homepage_or_other", "about", "product_or_service", "case_study", "news_or_blog", "contact"] },
+    "published_at": { "type": ["string", "null"], "format": "date" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "decision": { "type": "string", "enum": ["READY_FOR_REVIEW", "NEEDS_REVIEW", "REJECTED_INSUFFICIENT_EVIDENCE"] },
+    "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+  }
+}

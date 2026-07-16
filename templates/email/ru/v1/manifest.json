@@ -1,0 +1,9 @@
+{
+  "version": "email-ru-v1-placeholder",
+  "locale": "ru",
+  "sendable": false,
+  "owner_approved": false,
+  "allowed_placeholders": ["PERSONALIZATION_PHRASE", "COMPANY_NAME", "SENDER_NAME", "OPT_OUT_TEXT"],
+  "required_placeholders": ["PERSONALIZATION_PHRASE"],
+  "notice": "NON-SENDABLE PLACEHOLDER: final owner template is required"
+}

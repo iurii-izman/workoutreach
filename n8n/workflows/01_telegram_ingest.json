@@ -1,0 +1,37 @@
+{
+  "name": "01_telegram_ingest",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Telegram Test Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": { "updates": ["message", "callback_query"] },
+      "disabled": true
+    },
+    {
+      "name": "Allowlist and update idempotency",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [240, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT enabled FROM workoutreach.operator_allowlist WHERE telegram_user_id = $1 AND telegram_chat_id = $2 AND enabled = true; INSERT INTO workoutreach.telegram_updates(update_id, telegram_user_id, telegram_chat_id, result_code) VALUES ($3,$1,$2,'RECEIVED') ON CONFLICT (update_id) DO NOTHING;",
+        "options": { "queryReplacement": "={{ [$json.user_id, $json.chat_id, $json.update_id] }}" }
+      },
+      "disabled": true
+    },
+    {
+      "name": "Analyze company",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [480, 0],
+      "parameters": { "workflowId": { "mode": "list", "value": "02_analyze_company" }, "options": { "waitForSubWorkflow": true } },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

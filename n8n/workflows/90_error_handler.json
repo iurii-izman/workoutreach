@@ -1,0 +1,25 @@
+{
+  "name": "90_error_handler",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {},
+      "disabled": true
+    },
+    {
+      "name": "Safe error projection",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0],
+      "parameters": { "assignments": { "assignments": [{ "name": "safe_code", "value": "WORKFLOW_FAILED", "type": "string" }] }, "options": {} },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

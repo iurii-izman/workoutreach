@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workoutreach.invalid/schemas/phrase-generation.v1.schema.json",
+  "title": "Workoutreach phrase generation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["personalization_phrase", "overlap", "offer_claim_ids", "decision", "warnings"],
+  "properties": {
+    "personalization_phrase": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "overlap": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "offer_claim_ids": { "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } },
+    "decision": { "type": "string", "enum": ["READY_FOR_REVIEW", "NEEDS_REVIEW", "REJECTED_INSUFFICIENT_EVIDENCE"] },
+    "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+  }
+}

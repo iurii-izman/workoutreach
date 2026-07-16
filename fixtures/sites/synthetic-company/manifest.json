@@ -1,0 +1,9 @@
+{
+  "origin": "https://synthetic-company.example",
+  "routes": {
+    "/robots.txt": "robots.txt",
+    "/": "index.html",
+    "/about": "about.html",
+    "/contacts": "contacts.html"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "02_analyze_company",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Subworkflow Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "workflowInputs": { "values": [{ "name": "url" }, { "name": "job_id" }] } },
+      "disabled": true
+    },
+    {
+      "name": "URL security gate contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: activate only after importing reviewed n8n/code source through the approved build');" },
+      "disabled": true
+    },
+    {
+      "name": "Fact extraction Structured Output",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [440, -80],
+      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/fact-extraction.v1.schema.json" },
+      "disabled": true
+    },
+    {
+      "name": "Evidence gate contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, -80],
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: literal evidence gate must run before phrase generation');" },
+      "disabled": true
+    },
+    {
+      "name": "Phrase generation Structured Output",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [880, -80],
+      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/phrase-generation.v1.schema.json" },
+      "disabled": true
+    },
+    {
+      "name": "Business gate contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, -80],
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: deterministic business gate must pass before rendering');" },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

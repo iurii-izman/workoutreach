@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.secrets/
+artifacts/
+coverage/
+dist/
+.n8n/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

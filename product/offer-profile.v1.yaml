@@ -1,0 +1,9 @@
+{
+  "version": "offer-profile.v1",
+  "locale": "ru",
+  "sendable": false,
+  "owner_approved": false,
+  "claims": [],
+  "forbidden_claims": ["OWNER_INPUT_REQUIRED"],
+  "notice": "NON-SENDABLE PLACEHOLDER: owner-approved offer description is required"
+}

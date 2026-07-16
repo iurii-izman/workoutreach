@@ -1,0 +1,8 @@
+{
+  "implemented_stages": [0, 1],
+  "openai_transport": "stub",
+  "telegram_transport": "stub",
+  "mail_transport": "disabled",
+  "live_send_enabled": false,
+  "outbox_implemented": false
+}

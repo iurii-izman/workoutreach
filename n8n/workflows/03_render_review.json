@@ -1,0 +1,33 @@
+{
+  "name": "03_render_review",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Subworkflow Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "workflowInputs": { "values": [{ "name": "job_id" }, { "name": "analysis" }] } },
+      "disabled": true
+    },
+    {
+      "name": "Fixed template contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: use versioned templates/email/ru/v1 and persist immutable draft');" },
+      "disabled": true
+    },
+    {
+      "name": "Telegram Preview",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [480, 0],
+      "parameters": { "resource": "message", "operation": "sendMessage", "chatId": "TEST_ALLOWLIST_ONLY", "text": "DRY_RUN_PREVIEW_ONLY" },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

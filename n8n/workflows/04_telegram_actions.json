@@ -1,0 +1,25 @@
+{
+  "name": "04_telegram_actions",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Callback Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "workflowInputs": { "values": [{ "name": "callback_data" }] } },
+      "disabled": true
+    },
+    {
+      "name": "Stage 1 mock send block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": { "jsCode": "return [{json:{result:'MOCK_SEND_BLOCKED',transmitted:false,outboxCreated:false}}];" },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

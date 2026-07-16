@@ -1,0 +1,28 @@
+{
+  "name": "workoutreach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dry-run": "node scripts/dry-run.mjs",
+    "test": "node --test",
+    "preflight": "node scripts/preflight.mjs --mode=ci",
+    "greenfield": "node scripts/greenfield-guard.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs",
+    "licenses": "node scripts/license-scan.mjs",
+    "workflows:validate": "node scripts/validate-workflows.mjs",
+    "sbom": "node scripts/generate-sbom.mjs",
+    "verify": "node scripts/verify.mjs",
+    "smoke:docker": "node scripts/smoke.mjs",
+    "smoke:clean-clone": "node scripts/clean-clone.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "cheerio": "1.2.0",
+    "ipaddr.js": "2.4.0"
+  }
+}
