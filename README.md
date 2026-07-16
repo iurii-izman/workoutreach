@@ -1,15 +1,16 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed outreach prototype. This repository currently implements only stages 0 and 1: reproducible bootstrap plus an offline dry-run that ends at a complete Telegram preview. It cannot send email.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0 and 1 provide a reproducible bootstrap, deterministic offline dry-run and an explicit single-company guarded live evaluation. It cannot send email.
 
 `TECHNICAL_SPEC.md` is the contract. `AGENTS.md` defines the durable repository isolation and safety policy.
 
 ## Current safety state
 
-- OpenAI: deterministic stub; Responses API and strict JSON Schema contracts are prepared but inactive.
-- Telegram: rendered preview stub; no token and no network transmission.
+- OpenAI: deterministic stub in CI/default dry-run; an explicit `live:preview` uses the Responses API with strict Structured Outputs, `store=false` and no tools.
+- Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
 - Mail: disabled; no adapter, outbox, or credentials.
-- Templates and product offer: explicit non-sendable owner placeholders.
+- Template and candidate profile: owner-approved, versioned and still `sendable=false`; only company name and personalization phrase are dynamic.
+- CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
 
 ## Prerequisites
@@ -27,6 +28,28 @@ npm run dry-run
 ```
 
 The dry-run prints the complete Russian Telegram review payload and writes machine-readable evidence to `artifacts/evidence/dry-run.json`. The aggregate gate report is `artifacts/evidence/verification.json`. Runtime artifacts are ignored by Git.
+
+## Local secret setup and guarded live preview
+
+`.env` is ignored. It may contain `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, the external CV path/hash and non-secret allowlists. Verify them without a billed model call:
+
+```powershell
+npm run credentials:check
+```
+
+To populate the allowlist, send `/start` to the test bot from the intended private Telegram account, then run:
+
+```powershell
+npm run credentials:allowlist
+```
+
+Run exactly one company through live OpenAI analysis without transmitting the preview:
+
+```powershell
+npm run live:preview -- https://company.example/
+```
+
+Only after checking the allowlist, add `--telegram` to transmit the review preview. The button remains a physical mock block, and no mail transport or outbox is present.
 
 For a clean infrastructure start, migration and HTTPS health check:
 
@@ -47,7 +70,8 @@ npm run smoke:clean-clone
 - `n8n/code/lib/` — testable deterministic pipeline logic;
 - `n8n/workflows/` — sanitized, inactive, credential-free workflow contracts;
 - `schemas/` and `prompts/` — canonical model contracts;
-- `templates/` and `product/` — versioned, currently non-sendable owner placeholders;
+- `evals/` — owner-approved URL-only calibration manifests with hard size limits;
+- `templates/` and `product/` — versioned owner-approved campaign copy/profile, still non-sendable;
 - `migrations/` — PostgreSQL business-state schema;
 - `fixtures/` — synthetic source/model/offer evidence;
 - `scripts/` — preflight, scans, SBOM, workflow validation and smoke commands;
@@ -55,7 +79,7 @@ npm run smoke:clean-clone
 
 ## Intentionally blocked
 
-Do not add real keys merely to make CI green. Live OpenAI evaluation requires a test key and an owner-approved eval budget. A Telegram test bot requires a secret-channel token and explicit test user/chat allowlist. Production copy, mailbox provider, legal scope, retention deviations, and production host are still owner inputs.
+Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. Mailbox provider, legal review, corporate sender domain, retention deviations and production host are still owner inputs.
 
 Stages 2–5 are not implemented. In particular, there is no real approval token, suppression list, outbox, mail adapter, provider event processing, or live pilot path.
 

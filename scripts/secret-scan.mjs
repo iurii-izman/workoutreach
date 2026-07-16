@@ -1,9 +1,12 @@
 import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { listRepoEntries } from './lib/repo-files.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const execFileAsync = promisify(execFile);
 const findings = [];
 const patterns = [
   ['openai_key', /sk-(?:proj-)?[A-Za-z0-9_-]{20,}/gu],
@@ -12,8 +15,22 @@ const patterns = [
   ['aws_access_key', /\bAKIA[A-Z0-9]{16}\b/gu],
 ];
 
+async function isGitIgnored(relative) {
+  try {
+    await execFileAsync('git', ['check-ignore', '--quiet', '--', relative], { cwd: root, windowsHide: true });
+    return true;
+  } catch (error) {
+    if (error?.code === 1) return false;
+    throw error;
+  }
+}
+
 for (const entry of (await listRepoEntries(root)).filter((item) => item.stat.isFile())) {
-  if (/^\.env(?:\.|$)/u.test(entry.relative) && entry.relative !== '.env.example') findings.push({ file: entry.relative, kind: 'env_file' });
+  const localSecretStore = (/^\.env(?:\.|$)/u.test(entry.relative) && entry.relative !== '.env.example') || entry.relative.startsWith('.secrets/');
+  if (localSecretStore) {
+    if (!(await isGitIgnored(entry.relative))) findings.push({ file: entry.relative, kind: 'unignored_secret_store' });
+    continue;
+  }
   const buffer = await readFile(entry.path);
   if (buffer.includes(0)) continue;
   const text = buffer.toString('utf8');

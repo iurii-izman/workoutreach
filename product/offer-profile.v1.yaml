@@ -1,9 +1,53 @@
 {
   "version": "offer-profile.v1",
   "locale": "ru",
+  "campaign_type": "career_outreach",
   "sendable": false,
-  "owner_approved": false,
-  "claims": [],
-  "forbidden_claims": ["OWNER_INPUT_REQUIRED"],
-  "notice": "NON-SENDABLE PLACEHOLDER: owner-approved offer description is required"
+  "owner_approved": true,
+  "candidate": {
+    "name": "Юрий Изман",
+    "role": "Системный и бизнес-аналитик Bitrix24"
+  },
+  "claims": [
+    {
+      "id": "bitrix24-crm-6-plus-years",
+      "text": "Более 6 лет опыта работы с Bitrix24 и CRM."
+    },
+    {
+      "id": "bitrix24-25-plus-projects",
+      "text": "Участие более чем в 25 внедрениях Bitrix24."
+    },
+    {
+      "id": "analytics-full-cycle",
+      "text": "Полный аналитический цикл: обследование и моделирование процессов, требования, проектирование CRM-решений и интеграций, постановка задач, сопровождение реализации, запуск и поддержка."
+    },
+    {
+      "id": "crm-integrations",
+      "text": "Практический опыт проектирования CRM-интеграций и предметной работы с разработчиками."
+    },
+    {
+      "id": "ai-lead-intake-prototype",
+      "text": "Разработка AI Lead Intake Bitrix24 как рабочего прототипа квалификации и маршрутизации лидов с контролем человека."
+    },
+    {
+      "id": "communication-summary-prototype",
+      "text": "Разработка Bitrix24 Communication Summary Agent как рабочего прототипа анализа клиентских коммуникаций и подготовки следующих действий."
+    },
+    {
+      "id": "python-fastapi-api",
+      "text": "Техническая база в Python, FastAPI, REST API и вебхуках для проверки гипотез и совместной работы с разработчиками."
+    },
+    {
+      "id": "human-in-the-loop",
+      "text": "AI-прототипы проектируются с контролем человека."
+    }
+  ],
+  "forbidden_claims": [
+    "ML engineer или data scientist",
+    "PHP-разработчик",
+    "production-ready или коммерчески доказанная AI-система",
+    "неподтверждённые метрики, гарантии, результаты и названия клиентов",
+    "опыт, технологии и обязанности, отсутствующие в утверждённом профиле"
+  ],
+  "notice": "OWNER-APPROVED CAREER PROFILE; EMAIL TRANSMISSION REMAINS DISABLED"
 }

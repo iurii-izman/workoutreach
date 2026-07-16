@@ -7,7 +7,7 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [0, 0],
-      "parameters": { "workflowInputs": { "values": [{ "name": "job_id" }, { "name": "analysis" }] } },
+      "parameters": { "workflowInputs": { "values": [{ "name": "job_id" }, { "name": "analysis" }, { "name": "contact" }, { "name": "phone" }, { "name": "attachment" }] } },
       "disabled": true
     },
     {
@@ -15,7 +15,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [240, 0],
-      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: use versioned templates/email/ru/v1 and persist immutable draft');" },
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: render email-ru-career-v1 with only COMPANY_NAME and PERSONALIZATION_PHRASE; validate external CV; persist immutable non-sendable draft');" },
       "disabled": true
     },
     {

@@ -14,7 +14,7 @@
     "published_at": { "type": ["string", "null"], "format": "date" },
     "personalization_phrase": { "type": "string", "minLength": 1, "maxLength": 600 },
     "overlap": { "type": "string", "minLength": 1, "maxLength": 600 },
-    "offer_claim_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+    "offer_claim_ids": { "type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true, "items": { "type": "string" } },
     "word_count": { "type": "integer", "minimum": 0, "maximum": 100 },
     "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
     "decision": { "type": "string", "enum": ["READY_FOR_REVIEW", "NEEDS_CONTACT", "NEEDS_REVIEW", "REJECTED_INSUFFICIENT_EVIDENCE"] },

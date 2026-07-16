@@ -1,12 +1,18 @@
 import { SafeStop } from './errors.mjs';
 
-export function renderTelegramPreview({ jobId, siteUrl, recipient, analysis, draft, source, warnings }) {
+export function renderTelegramPreview({ jobId, siteUrl, recipient, phone, analysis, draft, source, warnings }) {
   const warningText = warnings.length ? warnings.join('; ') : 'нет';
+  const phoneText = phone?.selected?.phone ?? (phone?.decision === 'NEEDS_REVIEW' ? 'требует выбора' : 'не найден');
+  const attachmentText = draft.attachment?.status === 'VALIDATED'
+    ? `${draft.attachment.filename} (проверено)`
+    : `${draft.attachment?.filename ?? 'не настроено'} (не проверено)`;
   const text = `#${jobId} · ГОТОВО К ПРОВЕРКЕ (DRY-RUN)\n\n` +
     `Компания: ${analysis.company_name}\n` +
     `Сайт: ${siteUrl}\n` +
     `Адресат: ${recipient.email}\n` +
     `Источник адреса: ${recipient.source_url} (${recipient.source_id})\n\n` +
+    `Телефон: ${phoneText}\n` +
+    `Вложение: ${attachmentText}\n\n` +
     `ПЕРСОНАЛЬНАЯ ФРАЗА\n${analysis.personalization_phrase}\n\n` +
     `ИСТОЧНИК\n${source.title || source.source_type}\n${source.source_url}\n${analysis.source_excerpt}\n\n` +
     `ПРОВЕРКА\nФакт: ${analysis.fact}\n` +

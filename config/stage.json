@@ -2,6 +2,11 @@
   "implemented_stages": [0, 1],
   "openai_transport": "stub",
   "telegram_transport": "stub",
+  "guarded_live_eval": {
+    "openai_transport": "responses_api",
+    "telegram_transport": "preview_only",
+    "explicit_command_required": true
+  },
   "mail_transport": "disabled",
   "live_send_enabled": false,
   "outbox_implemented": false

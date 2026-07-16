@@ -16,7 +16,7 @@ function renderOne(template, values, manifest, html = false) {
   return template.replace(PLACEHOLDER, (_whole, name) => {
     if (!(name in values)) throw new SafeStop('TEMPLATE_VALUE_MISSING', 'Template value is missing', { name });
     const value = String(values[name]);
-    if (/\r|\n/u.test(value) && name !== 'PERSONALIZATION_PHRASE') throw new SafeStop('TEMPLATE_VALUE_CONTROL', 'Template value contains a forbidden line break', { name });
+    if (/\r|\n/u.test(value)) throw new SafeStop('TEMPLATE_VALUE_CONTROL', 'Template value contains a forbidden line break', { name });
     return html ? escapeHtml(value) : value;
   });
 }
@@ -30,6 +30,10 @@ export async function loadTemplate(root) {
     readFile(join(base, 'body.html'), 'utf8'),
   ]);
   const manifest = JSON.parse(manifestRaw);
+  const extraAllowed = manifest.allowed_placeholders.filter((name) => !['COMPANY_NAME', 'PERSONALIZATION_PHRASE'].includes(name));
+  if (extraAllowed.length || manifest.allowed_placeholders.length !== 2) {
+    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Career template may expose only company name and personalization phrase placeholders');
+  }
   for (const required of manifest.required_placeholders) {
     if (!`${subject}\n${bodyText}\n${bodyHtml}`.includes(`{{${required}}}`)) {
       throw new SafeStop('TEMPLATE_PLACEHOLDER_MISSING', 'Template set is missing a required placeholder', { required });
@@ -39,12 +43,18 @@ export async function loadTemplate(root) {
 }
 
 export function renderDraft(template, values) {
+  const extraValues = Object.keys(values).filter((name) => !template.manifest.allowed_placeholders.includes(name));
+  if (extraValues.length) throw new SafeStop('TEMPLATE_VALUE_UNKNOWN', 'Template received a value outside its placeholder contract', { extraValues });
   return {
     subject: renderOne(template.subject, values, template.manifest).trim(),
     body_text: renderOne(template.bodyText, values, template.manifest).trim(),
     body_html: renderOne(template.bodyHtml, values, template.manifest, true).trim(),
     template_version: template.manifest.version,
     template_sha256: template.hash,
+    attachment: {
+      ...template.manifest.attachment,
+      status: 'NOT_VALIDATED',
+    },
     sendable: template.manifest.sendable === true && template.manifest.owner_approved === true,
   };
 }

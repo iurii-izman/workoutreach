@@ -1,9 +1,19 @@
 {
-  "version": "email-ru-v1-placeholder",
+  "version": "email-ru-career-v1",
   "locale": "ru",
+  "campaign_type": "career_outreach",
   "sendable": false,
-  "owner_approved": false,
-  "allowed_placeholders": ["PERSONALIZATION_PHRASE", "COMPANY_NAME", "SENDER_NAME", "OPT_OUT_TEXT"],
-  "required_placeholders": ["PERSONALIZATION_PHRASE"],
-  "notice": "NON-SENDABLE PLACEHOLDER: final owner template is required"
+  "owner_approved": true,
+  "allowed_placeholders": ["COMPANY_NAME", "PERSONALIZATION_PHRASE"],
+  "required_placeholders": ["COMPANY_NAME", "PERSONALIZATION_PHRASE"],
+  "attachment": {
+    "required": true,
+    "filename": "Iurii_Izman_CV_Bitrix24_AI.pdf",
+    "mime_type": "application/pdf",
+    "source": "external_read_only_runtime_asset",
+    "path_env": "CV_ATTACHMENT_PATH",
+    "sha256_env": "CV_ATTACHMENT_SHA256",
+    "tracked_in_git": false
+  },
+  "notice": "OWNER-APPROVED TEMPLATE; EMAIL TRANSMISSION REMAINS DISABLED"
 }

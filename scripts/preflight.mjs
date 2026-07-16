@@ -11,8 +11,12 @@ const envExample = await readFile(join(root, '.env.example'), 'utf8');
 const errors = [];
 
 if (stage.live_send_enabled || stage.mail_transport !== 'disabled' || stage.outbox_implemented) errors.push('stage boundary permits sending');
-if (template.sendable || template.owner_approved) errors.push('template unexpectedly sendable');
-if (offer.sendable || offer.owner_approved || offer.claims.length) errors.push('product offer placeholder unexpectedly approved');
+if (template.sendable || !template.owner_approved) errors.push('owner-approved template boundary invalid');
+if (offer.sendable || !offer.owner_approved || offer.claims.length === 0) errors.push('owner-approved offer boundary invalid');
+if (template.allowed_placeholders.length !== 2 || !template.allowed_placeholders.includes('COMPANY_NAME') || !template.allowed_placeholders.includes('PERSONALIZATION_PHRASE')) {
+  errors.push('template placeholder boundary invalid');
+}
+if (!template.attachment?.required || template.attachment?.tracked_in_git !== false) errors.push('external CV attachment boundary invalid');
 if (!/^LIVE_SEND_ENABLED=false$/mu.test(envExample) || !/^MAIL_TRANSPORT=disabled$/mu.test(envExample)) errors.push('.env.example safety defaults invalid');
 if (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true') errors.push('LIVE_SEND_ENABLED=true is forbidden');
 if (process.env.MAIL_TRANSPORT && process.env.MAIL_TRANSPORT !== 'disabled') errors.push('mail transport must be disabled');

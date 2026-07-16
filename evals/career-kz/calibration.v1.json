@@ -1,0 +1,14 @@
+{
+  "version": "career-kz-calibration.v1",
+  "campaign_type": "career_outreach",
+  "owner_approved": true,
+  "max_targets": 10,
+  "targets": [
+    {
+      "id": "kz-cal-001",
+      "url": "https://profi-soft.kz/",
+      "provenance": "owner-provided example",
+      "enabled": true
+    }
+  ]
+}

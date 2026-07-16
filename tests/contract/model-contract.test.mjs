@@ -30,6 +30,9 @@ test('request A and B use strict JSON Schema, Store=false, and no tools', async 
     assert.deepEqual(request.tools, []);
     assert.equal(request.text.format.type, 'json_schema');
     assert.equal(request.text.format.strict, true);
+    assert.equal('$schema' in request.text.format.schema, false);
+    assert.equal('$id' in request.text.format.schema, false);
+    if (request === phraseRequest) assert.equal('uniqueItems' in request.text.format.schema.properties.offer_claim_ids, false);
   }
   const phrasePayload = JSON.parse(phraseRequest.input[0].content);
   assert.equal('sources' in phrasePayload, false);

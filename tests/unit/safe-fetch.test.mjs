@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeFetch } from '../../n8n/code/lib/safe-fetch.mjs';
+import { createPinnedLookup, safeFetch } from '../../n8n/code/lib/safe-fetch.mjs';
 
 const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
@@ -37,4 +37,12 @@ test('pins the public DNS result passed to the request transport', async () => {
     request: async (_url, resolved) => { observed = resolved; return { status: 200, headers: { 'content-type': 'text/html' }, body: '<p>ok</p>' }; },
   });
   assert.deepEqual(observed, [{ address: '93.184.216.34', family: 4 }]);
+});
+
+test('pinned lookup supports the Node 24 all-address callback contract', async () => {
+  const lookup = createPinnedLookup([{ address: '93.184.216.34', family: 4 }]);
+  const all = await new Promise((resolve, reject) => lookup('example.com', { all: true }, (error, result) => error ? reject(error) : resolve(result)));
+  assert.deepEqual(all, [{ address: '93.184.216.34', family: 4 }]);
+  const one = await new Promise((resolve, reject) => lookup('example.com', {}, (error, address, family) => error ? reject(error) : resolve({ address, family })));
+  assert.deepEqual(one, { address: '93.184.216.34', family: 4 });
 });

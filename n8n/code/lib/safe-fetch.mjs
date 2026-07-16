@@ -10,10 +10,20 @@ const DEFAULTS = Object.freeze({
   userAgent: 'WorkoutreachBot/0.1 (+https://workoutreach.invalid/bot)',
 });
 
+export function createPinnedLookup(resolved) {
+  if (!Array.isArray(resolved) || resolved.length === 0) throw new SafeStop('URL_DNS_EMPTY', 'Pinned DNS result is empty');
+  return (_hostname, lookupOptions, callback) => {
+    if (lookupOptions?.all) {
+      callback(null, resolved.map(({ address, family }) => ({ address, family })));
+      return;
+    }
+    callback(null, resolved[0].address, resolved[0].family);
+  };
+}
+
 function requestOnce(url, resolved, options) {
   return new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
-    const selected = resolved[0];
     const request = client.request(url, {
       method: 'GET',
       headers: {
@@ -23,7 +33,7 @@ function requestOnce(url, resolved, options) {
       },
       rejectUnauthorized: true,
       servername: url.hostname,
-      lookup: (_hostname, _lookupOptions, callback) => callback(null, selected.address, selected.family),
+      lookup: createPinnedLookup(resolved),
     }, (response) => {
       const chunks = [];
       let bytes = 0;

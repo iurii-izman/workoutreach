@@ -8,7 +8,7 @@
   "properties": {
     "personalization_phrase": { "type": "string", "minLength": 1, "maxLength": 600 },
     "overlap": { "type": "string", "minLength": 1, "maxLength": 600 },
-    "offer_claim_ids": { "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } },
+    "offer_claim_ids": { "type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } },
     "decision": { "type": "string", "enum": ["READY_FOR_REVIEW", "NEEDS_REVIEW", "REJECTED_INSUFFICIENT_EVIDENCE"] },
     "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
   }

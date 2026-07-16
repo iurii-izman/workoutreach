@@ -6,10 +6,15 @@ All files other than `TECHNICAL_SPEC.md` were newly authored for Workoutreach on
 
 - `TECHNICAL_SPEC.md` Final v1.1;
 - direct instruction from the owner in this task;
+- the owner-supplied research instruction, exact campaign email, current CV and explicitly supplied company URL;
 - official OpenAI, n8n, PostgreSQL, Caddy, Telegram, Docker, Node.js, npm, JSON Schema, and relevant RFC documentation;
 - public packages and container images listed in `docs/dependency-inventory.md`.
 
 No local repository outside this root was read, listed, searched, indexed, compared, linked, or used as an implementation source.
+
+The CV is an authorized owner input but remains an external read-only runtime asset. Neither the PDF, its local path nor its approval hash is tracked. Only CV-supported claims selected by the owner are represented in the versioned offer profile.
+
+The public Bitrix24 Kazakhstan partner catalog may be used as a future seed source. It has not been converted into a bulk target list, and no catalog entry authorizes transmission.
 
 ## First-commit evidence
 

@@ -9,8 +9,9 @@ const commands = [
   ['secret-scan', ['node', 'scripts/secret-scan.mjs']],
   ['license-scan', ['node', 'scripts/license-scan.mjs']],
   ['workflow-validator', ['node', 'scripts/validate-workflows.mjs']],
+  ['eval-dataset', ['node', 'scripts/validate-evals.mjs']],
   ['preflight', ['node', 'scripts/preflight.mjs', '--mode=ci']],
-  ['tests', ['node', '--test']],
+  ['tests', ['node', '--test', 'tests/**/*.test.mjs']],
   ['sbom', ['node', 'scripts/generate-sbom.mjs']],
   ['dry-run', ['node', 'scripts/dry-run.mjs']],
 ];

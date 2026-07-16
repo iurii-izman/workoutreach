@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseContact, classifyEmail, extractContactsFromHtml } from '../../n8n/code/lib/contacts.mjs';
+import { chooseContact, choosePhone, classifyEmail, extractContactsFromHtml, extractPhonesFromHtml } from '../../n8n/code/lib/contacts.mjs';
 
 const page = { source_id: 'p01', source_url: 'https://example.com/contacts' };
 
@@ -21,4 +21,29 @@ test('classifies protected-purpose mailboxes and refuses automatic selection', (
 test('requires a human when more than one eligible address exists', () => {
   const candidates = extractContactsFromHtml('<body>info@example.com sales@example.com</body>', page);
   assert.equal(chooseContact(candidates).decision, 'NEEDS_REVIEW');
+});
+
+test('career outreach prefers one recruiting address over a general mailbox', () => {
+  const candidates = extractContactsFromHtml('<body>hr@example.com info@example.com sales@example.com</body>', page);
+  const result = chooseContact(candidates, { campaignType: 'career_outreach' });
+  assert.equal(result.decision, 'SELECTED_FOR_REVIEW');
+  assert.equal(result.selected.email, 'hr@example.com');
+  assert.equal(result.candidates.find((item) => item.email === 'sales@example.com').automatic_selection_allowed, false);
+});
+
+test('career outreach requires review for multiple equally preferred recruiting addresses', () => {
+  const candidates = extractContactsFromHtml('<body>hr@example.com careers@example.com info@example.com</body>', page);
+  assert.equal(chooseContact(candidates, { campaignType: 'career_outreach' }).decision, 'NEEDS_REVIEW');
+});
+
+test('extracts published phones without inference and prefers the contact page', () => {
+  const about = { ...page, source_type: 'about' };
+  const contact = { ...page, source_id: 'p02', source_url: 'https://example.com/contacts', source_type: 'contact' };
+  const candidates = [
+    ...extractPhonesFromHtml('<body>Офис +7 (777) 111-22-33</body>', about),
+    ...extractPhonesFromHtml('<body><a href="tel:+77779432255">Позвонить</a></body>', contact),
+  ];
+  const result = choosePhone(candidates);
+  assert.equal(result.selected.normalized_phone, '+77779432255');
+  assert.equal(result.selected.source_id, 'p02');
 });

@@ -32,28 +32,59 @@ export function assertSchema(validate, value, code) {
   return value;
 }
 
-export async function buildFactRequest(root, pages, model = 'gpt-5.6') {
+function modelSettings(settings = {}) {
+  return {
+    model: settings.model ?? 'gpt-5.6',
+    effort: settings.effort ?? 'low',
+    maxOutputTokens: settings.maxOutputTokens ?? 2200,
+  };
+}
+
+function openAITransportSchema(schema) {
+  const transport = structuredClone(schema);
+  delete transport.$schema;
+  delete transport.$id;
+  const stripUnsupportedAnnotations = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(stripUnsupportedAnnotations);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    delete value.uniqueItems;
+    Object.values(value).forEach(stripUnsupportedAnnotations);
+  };
+  stripUnsupportedAnnotations(transport);
+  return transport;
+}
+
+export async function buildFactRequest(root, pages, settings = {}) {
   const schema = await loadJson(root, 'schemas/fact-extraction.v1.schema.json');
   const prompt = await readFile(join(root, 'prompts/fact-extraction/v1.md'), 'utf8');
+  const configured = typeof settings === 'string' ? modelSettings({ model: settings }) : modelSettings(settings);
   return {
-    model,
+    model: configured.model,
     store: false,
-    reasoning: { effort: 'low' },
+    reasoning: { effort: configured.effort },
+    max_output_tokens: configured.maxOutputTokens,
+    truncation: 'disabled',
     tools: [],
     instructions: prompt,
     input: [{ role: 'user', content: JSON.stringify({ sources: pages.map(({ source_id, source_type, text }) => ({ source_id, source_type, text })) }) }],
-    text: { format: { type: 'json_schema', name: 'workoutreach_fact_v1', strict: true, schema } },
+    text: { format: { type: 'json_schema', name: 'workoutreach_fact_v1', strict: true, schema: openAITransportSchema(schema) } },
     metadata: { prompt_version: 'fact-extraction.v1', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
   };
 }
 
-export async function buildPhraseRequest(root, fact, offerProfile, model = 'gpt-5.6') {
+export async function buildPhraseRequest(root, fact, offerProfile, settings = {}) {
   const schema = await loadJson(root, 'schemas/phrase-generation.v1.schema.json');
   const prompt = await readFile(join(root, 'prompts/phrase-generation/v1.md'), 'utf8');
+  const configured = typeof settings === 'string' ? modelSettings({ model: settings }) : modelSettings(settings);
   return {
-    model,
+    model: configured.model,
     store: false,
-    reasoning: { effort: 'low' },
+    reasoning: { effort: configured.effort },
+    max_output_tokens: configured.maxOutputTokens,
+    truncation: 'disabled',
     tools: [],
     instructions: prompt,
     input: [{
@@ -64,10 +95,10 @@ export async function buildPhraseRequest(root, fact, offerProfile, model = 'gpt-
         source_type: fact.source_type,
         offer_profile: offerProfile,
         locale: offerProfile.locale,
-        phrase_word_limits: { min: 18, max: 35 },
+        phrase_word_limits: { target_min: 25, target_max: 35, hard_min: 18, hard_max: 40 },
       }),
     }],
-    text: { format: { type: 'json_schema', name: 'workoutreach_phrase_v1', strict: true, schema } },
+    text: { format: { type: 'json_schema', name: 'workoutreach_phrase_v1', strict: true, schema: openAITransportSchema(schema) } },
     metadata: { prompt_version: 'phrase-generation.v1', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
   };
 }

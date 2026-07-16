@@ -7,7 +7,7 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [0, 0],
-      "parameters": { "workflowInputs": { "values": [{ "name": "url" }, { "name": "job_id" }] } },
+      "parameters": { "workflowInputs": { "values": [{ "name": "url" }, { "name": "job_id" }, { "name": "campaign_type" }] } },
       "disabled": true
     },
     {
@@ -15,7 +15,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [220, 0],
-      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: activate only after importing reviewed n8n/code source through the approved build');" },
+      "parameters": { "jsCode": "throw new Error('CONTRACT_ONLY: use safe crawl, career contact priority, published phone extraction, and reviewed n8n/code source only');" },
       "disabled": true
     },
     {
