@@ -30,20 +30,32 @@ export function compactEvidenceExcerpt(sourceText, factText, maxChars = 500) {
   if (index === -1) throw new SafeStop('EVIDENCE_FACT_NOT_LITERAL', 'Accepted fact could not be located for compact evidence');
   if (source.length <= maxChars) return source;
   const padding = Math.max(0, maxChars - fact.length);
-  const start = Math.max(0, Math.min(index - Math.floor(padding / 2), source.length - maxChars));
-  return source.slice(start, start + maxChars).trim();
+  let start = Math.max(0, Math.min(index - Math.floor(padding / 2), source.length - maxChars));
+  let end = Math.min(source.length, start + maxChars);
+  const sentenceBoundaries = ['. ', '! ', '? '].map((mark) => source.indexOf(mark, start)).filter((position) => position >= start && position < index);
+  const sentenceAdjusted = sentenceBoundaries.length > 0;
+  if (sentenceAdjusted) start = Math.min(...sentenceBoundaries) + 2;
+  if (!sentenceAdjusted && start > 0) {
+    const nextBoundary = source.indexOf(' ', start);
+    if (nextBoundary !== -1 && nextBoundary < index) start = nextBoundary + 1;
+  }
+  if (end < source.length) {
+    const previousBoundary = source.lastIndexOf(' ', end);
+    if (previousBoundary > index + fact.length) end = previousBoundary;
+  }
+  return source.slice(start, end).trim();
 }
 
 export async function loadOfferProfile(root, relative = 'product/offer-profile.v1.yaml') {
   return JSON.parse(await readFile(join(root, relative), 'utf8'));
 }
 
-export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, onModelEnvelope = null, seed = inputUrl, mode = 'offline-stub' }) {
+export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, seed = inputUrl, mode = 'offline-stub' }) {
   if (!offerProfile || (!offerProfile.owner_approved && !offerProfile.synthetic_eval)) {
     throw new SafeStop('OFFER_NOT_APPROVED', 'An owner-approved or synthetic-eval offer profile is required');
   }
   const jobId = makeJobId(seed);
-  const crawl = await crawlSite(inputUrl, fetcher);
+  const crawl = await crawlSite(inputUrl, fetcher, crawlLimits);
   const contacts = deduplicateContacts(crawl.pages.flatMap((page) => extractContactsFromHtml(page._html, page)));
   const contactDecision = chooseContact(contacts, { campaignType: offerProfile.campaign_type ?? 'general_outreach' });
   if (contactDecision.decision === 'NEEDS_CONTACT') throw new SafeStop('NEEDS_CONTACT', 'No eligible published contact address was found');

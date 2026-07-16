@@ -5,6 +5,7 @@
   "guarded_live_eval": {
     "openai_transport": "responses_api",
     "telegram_transport": "preview_only",
+    "telegram_update_mode": "allowlisted_local_long_polling",
     "explicit_command_required": true
   },
   "mail_transport": "disabled",

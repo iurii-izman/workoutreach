@@ -33,10 +33,16 @@ export function createTelegramClient({ botToken, allowedChatIds, fetchImpl = glo
   const allowlist = allowedChatIds instanceof Set ? allowedChatIds : parseIdAllowlist(allowedChatIds);
   if (allowlist.size === 0) throw new SafeStop('TELEGRAM_ALLOWLIST_EMPTY', 'At least one Telegram chat ID must be allowlisted');
 
-  async function call(method, payload) {
+  function assertAllowedChat(chatId) {
+    const normalizedChatId = String(chatId);
+    if (!allowlist.has(normalizedChatId)) throw new SafeStop('TELEGRAM_UNAUTHORIZED', 'Telegram chat is not allowlisted');
+    return normalizedChatId;
+  }
+
+  async function call(method, payload = {}, { timeoutMs = 15_000 } = {}) {
     let response;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     timer.unref?.();
     try {
       response = await fetchImpl(`${apiBase}/bot${botToken}/${method}`, {
@@ -57,13 +63,12 @@ export function createTelegramClient({ botToken, allowedChatIds, fetchImpl = glo
     } catch {
       throw new SafeStop('TELEGRAM_RESPONSE_INVALID', 'Telegram returned an unreadable response');
     }
-    if (!body.ok) throw new SafeStop('TELEGRAM_API_ERROR', 'Telegram rejected the preview request', { error_code: body.error_code ?? null });
+    if (!body.ok) throw new SafeStop('TELEGRAM_API_ERROR', 'Telegram rejected the Bot API request', { error_code: body.error_code ?? null });
     return body.result;
   }
 
   async function sendPreview(preview, chatId) {
-    const normalizedChatId = String(chatId);
-    if (!allowlist.has(normalizedChatId)) throw new SafeStop('TELEGRAM_UNAUTHORIZED', 'Telegram chat is not allowlisted');
+    const normalizedChatId = assertAllowedChat(chatId);
     const chunks = splitTelegramText(preview.text);
     const messages = [];
     for (let index = 0; index < chunks.length; index += 1) {
@@ -78,5 +83,51 @@ export function createTelegramClient({ botToken, allowedChatIds, fetchImpl = glo
     return { transport: 'telegram-live-preview', transmitted: true, chunk_count: chunks.length, message_ids: messages.map((message) => message.message_id) };
   }
 
-  return { call, sendPreview };
+  async function sendText(chatId, text, options = {}) {
+    const normalizedChatId = assertAllowedChat(chatId);
+    const chunks = splitTelegramText(text);
+    const messages = [];
+    for (let index = 0; index < chunks.length; index += 1) {
+      const final = index === chunks.length - 1;
+      messages.push(await call('sendMessage', {
+        chat_id: normalizedChatId,
+        text: chunks[index],
+        disable_web_page_preview: options.disableWebPagePreview ?? true,
+        ...(final && options.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
+      }));
+    }
+    return messages;
+  }
+
+  async function getUpdates(offset, timeoutSeconds = 25) {
+    return call('getUpdates', {
+      ...(Number.isInteger(offset) ? { offset } : {}),
+      limit: 20,
+      timeout: timeoutSeconds,
+      allowed_updates: ['message', 'callback_query'],
+    }, { timeoutMs: (timeoutSeconds + 5) * 1000 });
+  }
+
+  async function answerCallbackQuery(callbackQueryId, options = {}) {
+    return call('answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      ...(options.text ? { text: options.text } : {}),
+      show_alert: options.showAlert ?? false,
+      cache_time: 0,
+    });
+  }
+
+  async function sendChatAction(chatId, action = 'typing') {
+    return call('sendChatAction', { chat_id: assertAllowedChat(chatId), action });
+  }
+
+  async function clearInlineKeyboard(chatId, messageId) {
+    return call('editMessageReplyMarkup', {
+      chat_id: assertAllowedChat(chatId),
+      message_id: messageId,
+      reply_markup: { inline_keyboard: [] },
+    });
+  }
+
+  return { call, sendPreview, sendText, getUpdates, answerCallbackQuery, sendChatAction, clearInlineKeyboard };
 }

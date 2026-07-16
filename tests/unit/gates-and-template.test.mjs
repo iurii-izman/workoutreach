@@ -40,4 +40,8 @@ test('business gate enforces one sentence, one claim and a hard maximum of 40 wo
   assert.equal(businessGate(base, offer).accepted, true);
   assert.throws(() => businessGate({ ...base, offer_claim_ids: ['claim-1', 'claim-2'] }, offer), { code: 'OFFER_CLAIM_COUNT' });
   assert.throws(() => businessGate({ ...base, personalization_phrase: `${base.personalization_phrase} Ещё одно предложение.` }, offer), { code: 'PHRASE_SENTENCE_COUNT' });
+  assert.throws(() => businessGate({
+    ...base,
+    personalization_phrase: 'Ваше внедрение и сопровождение CRM под ключ напрямую пересекается с моим опытом полного аналитического цикла, проектирования решений, запуска, поддержки и совместной работы с командами интеграторов Bitrix24.',
+  }, offer), { code: 'PHRASE_GRAMMAR_AGREEMENT' });
 });

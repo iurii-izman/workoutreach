@@ -82,8 +82,11 @@ try {
     validateConfiguredCv(),
   ]);
 
+  const existingUserAllowlist = configuredAllowlist(process.env.ALLOWED_TELEGRAM_USER_IDS);
+  const existingChatAllowlist = configuredAllowlist(process.env.ALLOWED_TELEGRAM_CHAT_IDS);
   let candidates = [];
-  if (!webhook.url) {
+  const discoveryRequired = existingUserAllowlist.size === 0 || existingChatAllowlist.size === 0;
+  if (!webhook.url && discoveryRequired) {
     const updates = await telegramCall(telegramToken, 'getUpdates', { limit: 100, allowed_updates: ['message'] });
     const unique = new Map();
     for (const update of updates) {
@@ -99,8 +102,8 @@ try {
     await updateIgnoredEnv(candidates[0].userId, candidates[0].chatId);
     allowlistUpdated = true;
   }
-  const userAllowlist = allowlistUpdated ? new Set([candidates[0].userId]) : configuredAllowlist(process.env.ALLOWED_TELEGRAM_USER_IDS);
-  const chatAllowlist = allowlistUpdated ? new Set([candidates[0].chatId]) : configuredAllowlist(process.env.ALLOWED_TELEGRAM_CHAT_IDS);
+  const userAllowlist = allowlistUpdated ? new Set([candidates[0].userId]) : existingUserAllowlist;
+  const chatAllowlist = allowlistUpdated ? new Set([candidates[0].chatId]) : existingChatAllowlist;
 
   console.log(JSON.stringify({
     ok: true,
@@ -109,7 +112,7 @@ try {
       authenticated: true,
       bot_username: bot.username ?? null,
       webhook_configured: Boolean(webhook.url),
-      private_update_candidates: webhook.url ? null : candidates.length,
+      private_update_candidates: webhook.url || !discoveryRequired ? null : candidates.length,
       allowlist_configured: userAllowlist.size > 0 && chatAllowlist.size > 0,
       allowlist_updated: allowlistUpdated,
     },

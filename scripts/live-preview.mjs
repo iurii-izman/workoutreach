@@ -1,11 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateConfiguredCv } from '../n8n/code/lib/attachments.mjs';
 import { asSafeResult, SafeStop } from '../n8n/code/lib/errors.mjs';
-import { createOpenAIAdapter } from '../n8n/code/lib/openai.mjs';
-import { analyzeDryRun, loadOfferProfile } from '../n8n/code/lib/pipeline.mjs';
-import { safeFetch } from '../n8n/code/lib/safe-fetch.mjs';
+import { analyzeLiveCompany } from '../n8n/code/lib/live-analysis.mjs';
 import { createTelegramClient, parseIdAllowlist } from '../n8n/code/lib/telegram-api.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,37 +12,15 @@ const positional = process.argv.slice(2).filter((value) => !value.startsWith('--
 
 try {
   if (positional.length !== 1) throw new SafeStop('LIVE_URL_REQUIRED', 'Pass exactly one public company URL');
-  if (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true' || (process.env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled') {
-    throw new SafeStop('LIVE_SEND_BLOCKED', 'Mail must remain disabled for a live preview');
-  }
-  if ((process.env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'Set OPENAI_MODE=live-eval explicitly for a live preview');
-
-  const offerProfile = await loadOfferProfile(root);
-  const attachment = await validateConfiguredCv();
-  const modelAdapter = createOpenAIAdapter({ apiKey: process.env.OPENAI_API_KEY });
   await mkdir(join(root, 'artifacts/evidence'), { recursive: true });
-  const result = await analyzeDryRun({
+  const result = await analyzeLiveCompany({
     root,
     inputUrl: positional[0],
-    fetcher: (url) => safeFetch(url, {
-      maxRedirects: Number(process.env.MAX_REDIRECTS ?? 3),
-      timeoutMs: Number(process.env.PAGE_TIMEOUT_MS ?? 10_000),
-      maxBytes: Number(process.env.MAX_RESPONSE_BYTES ?? 2_097_152),
-    }),
-    modelAdapter,
-    offerProfile,
-    attachment,
-    modelSettings: {
-      model: process.env.OPENAI_MODEL ?? 'gpt-5.6',
-      effort: process.env.OPENAI_REASONING_EFFORT ?? 'low',
-      maxOutputTokens: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS ?? 2200),
-    },
     onModelEnvelope: ({ phase, envelope }) => writeFile(
       join(root, 'artifacts/evidence', `live-model-${phase}.json`),
       `${JSON.stringify(envelope, null, 2)}\n`,
       'utf8',
     ),
-    mode: 'guarded-live-eval',
   });
 
   let telegram = { requested: false, transmitted: false };

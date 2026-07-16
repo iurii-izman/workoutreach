@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFixtureFetcher, createModelStub } from '../../n8n/code/lib/fixture-adapters.mjs';
-import { analyzeDryRun, loadOfferProfile } from '../../n8n/code/lib/pipeline.mjs';
+import { analyzeDryRun, compactEvidenceExcerpt, loadOfferProfile } from '../../n8n/code/lib/pipeline.mjs';
 
 const root = decodeURIComponent(new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1)));
 
@@ -33,4 +33,19 @@ test('owner campaign profile is approved but cannot enable email transmission', 
   assert.equal(profile.campaign_type, 'career_outreach');
   assert.equal(profile.sendable, false);
   assert.ok(profile.claims.length > 0);
+});
+
+test('compact evidence keeps the accepted fact and does not cut boundary words', () => {
+  const prefix = 'начало '.repeat(100);
+  const fact = 'Подтверждённый факт о CRM.';
+  const excerpt = compactEvidenceExcerpt(`${prefix}${fact} ${'конец '.repeat(100)}`, fact, 160);
+  assert.match(excerpt, /Подтверждённый факт о CRM\./u);
+  assert.doesNotMatch(excerpt, /^ачало|^онец/u);
+  assert.doesNotMatch(excerpt, /\sнача$/u);
+});
+
+test('compact evidence prefers a nearby sentence boundary before the fact', () => {
+  const fact = 'Настраиваем Битрикс24 под ключ.';
+  const excerpt = compactEvidenceExcerpt(`${'далёкий контекст '.repeat(20)}Завершённая мысль! Важный контекст. ${fact} ${'хвост '.repeat(50)}`, fact, 180);
+  assert.match(excerpt, /^Важный контекст\. Настраиваем Битрикс24 под ключ\./u);
 });

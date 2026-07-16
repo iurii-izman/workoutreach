@@ -909,6 +909,7 @@ Gate: clean start, healthchecks, migrations, tests, preflight, greenfield/secret
 - fixed template;
 - полный Telegram-предпросмотр;
 - `Отправить` заменён безопасным mock-action.
+- до появления production HTTPS-домена test-бот может использовать единственный локальный allowlisted `getUpdates` long-polling adapter с persisted offset/heartbeat; webhook и второй poller при этом запрещены.
 
 Gate: критерии 1–9 и security tests пройдены; владелец принимает качество на eval-наборе.
 

@@ -7,6 +7,7 @@ artifacts/
 coverage/
 dist/
 .n8n/
+.runtime/
 *.log
 *.tmp
 .DS_Store

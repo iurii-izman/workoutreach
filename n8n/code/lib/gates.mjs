@@ -38,11 +38,14 @@ export function businessGate(phrase, offerProfile) {
   if ((text.match(/[А-Яа-яЁё]/gu)?.length ?? 0) < 5) throw new SafeStop('PHRASE_LANGUAGE', 'Personalization phrase is not demonstrably Russian');
   if (/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/u.test(text)) throw new SafeStop('PHRASE_EMAIL_BLOCKED', 'Personalization phrase contains an email address');
   if (/<[^>]+>|\[[^\]]+\]\([^)]+\)|https?:\/\//iu.test(text)) throw new SafeStop('PHRASE_MARKUP_BLOCKED', 'Personalization phrase contains markup or a link');
-  if (/\b(?:ignore|system prompt|инструкц(?:ия|ии)|выполни|```|<script)\b/iu.test(text)) throw new SafeStop('PHRASE_INSTRUCTION_BLOCKED', 'Personalization phrase contains instruction-like content');
+  if (/(?<![\p{L}\p{M}\p{N}_])(?:ignore|system prompt|инструкц(?:ия|ии)|выполни|```|<script)(?![\p{L}\p{M}\p{N}_])/iu.test(text)) throw new SafeStop('PHRASE_INSTRUCTION_BLOCKED', 'Personalization phrase contains instruction-like content');
   if (/\+?\d[\d\s().-]{7,}\d/u.test(text)) throw new SafeStop('PHRASE_PHONE_BLOCKED', 'Personalization phrase contains a phone number');
-  if (/\b(?:добрый\s+день|подскажите|буду\s+рад|созвон|резюме|с\s+уважением|telegram)\b/iu.test(text)) {
+  if (/(?<![\p{L}\p{M}\p{N}_])(?:добрый\s+день|подскажите|буду\s+рад|созвон|резюме|с\s+уважением|telegram)(?![\p{L}\p{M}\p{N}_])/iu.test(text)) {
     throw new SafeStop('PHRASE_TEMPLATE_CONTENT', 'Personalization phrase contains greeting, CTA, CV reference or signature content');
   }
+  if (/^Ваш[ае]\s+[\p{L}\p{M}-]+(?:\s+[\p{L}\p{M}-]+){0,3}\s+и\s+[\p{L}\p{M}-]+[^.!?]{0,160}(?<![\p{L}\p{M}])пересекается(?![\p{L}\p{M}])/iu.test(text)) {
+    throw new SafeStop('PHRASE_GRAMMAR_AGREEMENT', 'Compound Russian subject requires plural verb agreement');
+  }
   const targetRange = count >= 25 && count <= 35;
-  return { accepted: true, wordCount: count, targetRange, checks: ['offer_claim_ids', 'decision', 'word_count', 'one_sentence', 'language', 'pii', 'markup', 'instructions', 'template_separation'] };
+  return { accepted: true, wordCount: count, targetRange, checks: ['offer_claim_ids', 'decision', 'word_count', 'one_sentence', 'language', 'pii', 'markup', 'instructions', 'template_separation', 'grammar_agreement'] };
 }

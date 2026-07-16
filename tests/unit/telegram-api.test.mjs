@@ -32,3 +32,19 @@ test('Telegram client blocks a non-allowlisted chat before network access', asyn
 test('Telegram text splitter never exceeds the API character limit', () => {
   assert.ok(splitTelegramText('x'.repeat(9000)).every((part) => part.length <= 3900));
 });
+
+test('Telegram long polling uses explicit offset and only message/callback updates', async () => {
+  let payload;
+  const client = createTelegramClient({
+    botToken: fakeToken,
+    allowedChatIds: new Set(['202']),
+    fetchImpl: async (_url, options) => {
+      payload = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: [] }) };
+    },
+  });
+  assert.deepEqual(await client.getUpdates(42, 25), []);
+  assert.equal(payload.offset, 42);
+  assert.equal(payload.timeout, 25);
+  assert.deepEqual(payload.allowed_updates, ['message', 'callback_query']);
+});

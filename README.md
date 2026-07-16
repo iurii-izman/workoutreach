@@ -51,6 +51,18 @@ npm run live:preview -- https://company.example/
 
 Only after checking the allowlist, add `--telegram` to transmit the review preview. The button remains a physical mock block, and no mail transport or outbox is present.
 
+## Interactive Telegram test bot
+
+Configure the bot profile and run the allowlisted local polling adapter:
+
+```powershell
+npm run bot:configure
+npm run bot:start
+npm run bot:status
+```
+
+The bot answers `/start`, `/help`, `/status`, `/version`, accepts one company URL and returns a complete live preview. `Перегенерировать` is limited to two explicit attempts, `Отклонить` closes the review controls, and `Отправить` is always blocked. Stop the local adapter with `npm run bot:stop` before configuring a webhook or another polling process. See [the test-bot runbook](docs/runbooks/telegram-test-bot.md).
+
 For a clean infrastructure start, migration and HTTPS health check:
 
 ```powershell
