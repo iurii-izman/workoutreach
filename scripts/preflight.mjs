@@ -10,7 +10,12 @@ const offer = JSON.parse(await readFile(join(root, 'product/offer-profile.v1.yam
 const envExample = await readFile(join(root, '.env.example'), 'utf8');
 const errors = [];
 
-if (stage.live_send_enabled || stage.mail_transport !== 'disabled' || stage.outbox_implemented) errors.push('stage boundary permits sending');
+if (stage.live_send_enabled || stage.mail_transport !== 'disabled' || stage.live_outbox_implemented) errors.push('stage boundary permits sending');
+if (!stage.stage2_mock_foundation?.mock_outbox_implemented
+  || stage.stage2_mock_foundation.database_core !== 'implemented_and_smoke_verified'
+  || stage.stage2_mock_foundation.mail_transmission_possible !== false
+  || stage.stage2_mock_foundation.operator_adapter_activated !== false
+) errors.push('stage-2 mock boundary invalid');
 if (template.sendable || !template.owner_approved) errors.push('owner-approved template boundary invalid');
 if (offer.sendable || !offer.owner_approved || offer.claims.length === 0) errors.push('owner-approved offer boundary invalid');
 if (template.allowed_placeholders.length !== 2 || !template.allowed_placeholders.includes('COMPANY_NAME') || !template.allowed_placeholders.includes('PERSONALIZATION_PHRASE')) {

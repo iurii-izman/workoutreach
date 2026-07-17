@@ -1,0 +1,46 @@
+{
+  "name": "05_mock_dispatch",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Mock schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] } },
+      "disabled": true
+    },
+    {
+      "name": "Claim one mock command",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [240, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT result_code, outbox_id, job_id, draft_version FROM workoutreach.dispatch_next_mock_outbox('n8n-stage2-mock-worker');",
+        "options": {}
+      },
+      "disabled": true
+    },
+    {
+      "name": "No transmission assertion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "name": "mail_transmitted", "value": false, "type": "boolean" },
+            { "name": "provider_message_id", "value": null, "type": "string" },
+            { "name": "operator_status", "value": "MOCK_ACCEPTED — внешней отправки не было", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "disabled": true
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": false },
+  "tags": []
+}

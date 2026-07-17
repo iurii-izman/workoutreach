@@ -17,7 +17,7 @@
       "position": [240, 0],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT enabled FROM workoutreach.operator_allowlist WHERE telegram_user_id = $1 AND telegram_chat_id = $2 AND enabled = true; INSERT INTO workoutreach.telegram_updates(update_id, telegram_user_id, telegram_chat_id, result_code) VALUES ($3,$1,$2,'RECEIVED') ON CONFLICT (update_id) DO NOTHING;",
+        "query": "WITH authorized AS (SELECT 1 FROM workoutreach.operator_allowlist WHERE telegram_user_id = $1 AND telegram_chat_id = $2 AND enabled = true), inserted AS (INSERT INTO workoutreach.telegram_updates(update_id, telegram_user_id, telegram_chat_id, result_code) SELECT $3,$1,$2,'RECEIVED' FROM authorized ON CONFLICT (update_id) DO NOTHING RETURNING update_id) SELECT EXISTS(SELECT 1 FROM authorized) AS authorized, EXISTS(SELECT 1 FROM inserted) AS first_processing;",
         "options": { "queryReplacement": "={{ [$json.user_id, $json.chat_id, $json.update_id] }}" }
       },
       "disabled": true

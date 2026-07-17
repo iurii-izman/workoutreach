@@ -7,15 +7,47 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [0, 0],
-      "parameters": { "workflowInputs": { "values": [{ "name": "callback_data" }] } },
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            { "name": "callback_data" },
+            { "name": "update_id" },
+            { "name": "telegram_user_id" },
+            { "name": "telegram_chat_id" }
+          ]
+        }
+      },
       "disabled": true
     },
     {
-      "name": "Stage 1 mock send block",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Atomic mock approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
       "position": [240, 0],
-      "parameters": { "jsCode": "return [{json:{result:'MOCK_SEND_BLOCKED',transmitted:false,outboxCreated:false}}];" },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT result_code, outbox_id, job_status FROM workoutreach.handle_mock_send_callback($1,$2,$3,$4);",
+        "options": {
+          "queryReplacement": "={{ [$json.callback_data, $json.telegram_user_id, $json.telegram_chat_id, 'tg:' + $json.update_id] }}"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "name": "Exact mock status contract",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "name": "transmitted", "value": false, "type": "boolean" },
+            { "name": "transport", "value": "mock", "type": "string" },
+            { "name": "status_copy", "value": "Mock-команда сохранена. Email не отправлен.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
       "disabled": true
     }
   ],

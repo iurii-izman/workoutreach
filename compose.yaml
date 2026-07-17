@@ -19,7 +19,10 @@ services:
     networks:
       - workoutreach_internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U workoutreach_admin -d postgres"]
+      # The official image starts a temporary PostgreSQL server during first-time
+      # initialization. PID 1 becomes postgres only after that server is stopped
+      # and the durable server is ready, preventing dependent migrations racing it.
+      test: ["CMD-SHELL", "test \"$$(cat /proc/1/comm)\" = postgres && pg_isready -U workoutreach_admin -d workoutreach_business"]
       interval: 5s
       timeout: 5s
       retries: 20

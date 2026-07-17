@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const directory = join(root, 'n8n/workflows');
-const expected = ['01_telegram_ingest', '02_analyze_company', '03_render_review', '04_telegram_actions', '90_error_handler'];
+const expected = ['01_telegram_ingest', '02_analyze_company', '03_render_review', '04_telegram_actions', '05_mock_dispatch', '90_error_handler'];
 const errors = [];
 const workflows = [];
 for (const file of (await readdir(directory)).filter((name) => name.endsWith('.json')).sort()) {
@@ -30,7 +30,12 @@ for (const node of openAi) {
   if (node.disabled !== true) errors.push(`${node.name}: must remain disabled until credential/eval gate`);
 }
 const actions = workflows.find((workflow) => workflow.name === '04_telegram_actions');
-if (!JSON.stringify(actions).includes('MOCK_SEND_BLOCKED') || actions.nodes.some((node) => node.type === 'n8n-nodes-base.postgres')) errors.push('04_telegram_actions: mock action contract invalid');
+if (!actions?.nodes.some((node) => node.type === 'n8n-nodes-base.postgres') || !JSON.stringify(actions).includes('handle_mock_send_callback')) errors.push('04_telegram_actions: atomic database approval contract missing');
+const mockDispatch = workflows.find((workflow) => workflow.name === '05_mock_dispatch');
+if (!mockDispatch || !JSON.stringify(mockDispatch).includes('dispatch_next_mock_outbox')) errors.push('05_mock_dispatch: database mock dispatcher contract missing');
+for (const workflow of [actions, mockDispatch].filter(Boolean)) {
+  if (workflow.nodes.some((node) => ['n8n-nodes-base.emailSend', 'n8n-nodes-base.httpRequest'].includes(node.type))) errors.push(`${workflow.name}: external transmission node is forbidden in stage 2`);
+}
 
 if (errors.length) {
   console.error(JSON.stringify({ gate: 'workflow-validator', ok: false, errors }, null, 2));

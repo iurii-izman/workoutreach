@@ -10,5 +10,12 @@
   },
   "mail_transport": "disabled",
   "live_send_enabled": false,
-  "outbox_implemented": false
+  "live_outbox_implemented": false,
+  "stage2_mock_foundation": {
+    "database_core": "implemented_and_smoke_verified",
+    "n8n_exports": "inactive_credential_free_contracts",
+    "mock_outbox_implemented": true,
+    "mail_transmission_possible": false,
+    "operator_adapter_activated": false
+  }
 }

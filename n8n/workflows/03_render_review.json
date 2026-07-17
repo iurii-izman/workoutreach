@@ -7,7 +7,7 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [0, 0],
-      "parameters": { "workflowInputs": { "values": [{ "name": "job_id" }, { "name": "analysis" }, { "name": "contact" }, { "name": "phone" }, { "name": "attachment" }] } },
+      "parameters": { "workflowInputs": { "values": [{ "name": "job_id" }, { "name": "draft_version" }, { "name": "telegram_user_id" }, { "name": "telegram_chat_id" }, { "name": "analysis" }, { "name": "contact" }, { "name": "phone" }, { "name": "attachment" }] } },
       "disabled": true
     },
     {
@@ -19,11 +19,23 @@
       "disabled": true
     },
     {
+      "name": "Issue one-time mock approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [480, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT callback_data, expires_at FROM workoutreach.issue_mock_approval_token($1,$2,$3,$4);",
+        "options": { "queryReplacement": "={{ [$json.job_id, $json.draft_version, $json.telegram_user_id, $json.telegram_chat_id] }}" }
+      },
+      "disabled": true
+    },
+    {
       "name": "Telegram Preview",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [480, 0],
-      "parameters": { "resource": "message", "operation": "sendMessage", "chatId": "TEST_ALLOWLIST_ONLY", "text": "DRY_RUN_PREVIEW_ONLY" },
+      "position": [720, 0],
+      "parameters": { "resource": "message", "operation": "sendMessage", "chatId": "TEST_ALLOWLIST_ONLY", "text": "STAGE2_REVIEW_WITH_ONE_TIME_MOCK_APPROVAL_ONLY" },
       "disabled": true
     }
   ],

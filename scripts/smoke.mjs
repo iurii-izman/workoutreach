@@ -19,13 +19,17 @@ try {
     run('docker', ['compose', 'exec', '-T', 'workoutreach-n8n', '/workoutreach/n8n-entrypoint.sh', 'import:workflow', `--input=/tmp/${file}`]);
   }
   run('docker', ['compose', '--profile', 'tools', 'run', '--rm', 'workoutreach-migrate']);
-  run('docker', ['compose', 'exec', '-T', 'workoutreach-postgres', 'psql', '-U', 'workoutreach_admin', '-d', 'workoutreach_business', '-c', "SELECT version FROM workoutreach.schema_migrations WHERE version IN ('001_stage_0_1','002_owner_campaign_stage_1') ORDER BY version;"]);
+  run('docker', ['compose', 'exec', '-T', 'workoutreach-postgres', 'psql', '-U', 'workoutreach_admin', '-d', 'workoutreach_business', '-c', "SELECT version FROM workoutreach.schema_migrations WHERE version IN ('001_stage_0_1','002_owner_campaign_stage_1','003_stage_2_mock_outbox') ORDER BY version;"]);
+  run('node', ['scripts/stage2-db-smoke.mjs']);
+  run('node', ['scripts/backup-restore-smoke.mjs']);
   mkdirSync(resolve(root, 'artifacts/evidence'), { recursive: true });
   writeFileSync(resolve(root, 'artifacts/evidence/docker-smoke.json'), `${JSON.stringify({
     ok: true,
     images: { postgres: 'healthy', n8n: 'healthy', caddy: 'healthy' },
-    workflows_imported: 5,
-    migrations: ['001_stage_0_1', '002_owner_campaign_stage_1'],
+    workflows_imported: 6,
+    migrations: ['001_stage_0_1', '002_owner_campaign_stage_1', '003_stage_2_mock_outbox'],
+    stage2_mock_outbox: { replay: 'passed', concurrency: 'passed', suppression: 'passed', mail_transmitted: false },
+    backup_restore: 'passed',
     live_send_enabled: false,
   }, null, 2)}\n`, 'utf8');
   console.log(JSON.stringify({ gate: 'docker-smoke', ok: true }));

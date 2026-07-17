@@ -1,6 +1,6 @@
 # Provider and production compliance gate
 
-No mail provider is selected and no live send is implemented in stages 0–1.
+No mail provider is selected and no live send is implemented in stages 0–2. Stage 2 has a database-enforced mock transport only.
 
 The active owner-approved use case is individualized career outreach by one candidate to published business contacts of Bitrix24 integrators in Kazakhstan. Recruiting addresses are preferred and a fixed reply-based opt-out is present. These product choices are not a legal determination and do not authorize bulk sending, automatic sending, purchased contact data, mailbox guessing, or expansion to another country.
 
