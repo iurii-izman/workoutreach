@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. Stage 2 adds persistent evidence/drafts, atomic one-time approval, suppression and a physically mock-only outbox. It cannot send email.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. A guarded SMTP delivery adapter is implemented but remains disabled until the owner supplies and verifies a mailbox.
 
 `TECHNICAL_SPEC.md` is the contract. `AGENTS.md` defines the durable repository isolation and safety policy.
 
@@ -8,7 +8,7 @@ Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype fo
 
 - OpenAI: deterministic stub in CI/default dry-run; an explicit `live:preview` uses the Responses API with strict Structured Outputs, `store=false` and no tools.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
-- Mail: disabled; no adapter or credentials. The database has a mock-only outbox whose constraints prohibit provider IDs and live transport.
+- Mail: guarded SMTP adapter and at-most-once queue implemented; disabled by default, no mailbox credentials currently configured.
 - Template and candidate profile: owner-approved, versioned and still `sendable=false`; only company name and personalization phrase are dynamic.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
@@ -67,6 +67,10 @@ Use `npm run local:stop` to stop containers without deleting their named volumes
 
 The conservative default `DAILY_ANALYSIS_LIMIT=2` means no more than four OpenAI calls per UTC day. Set it to `1` in ignored `.env` for single-site calibration. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
+## Activate one SMTP mailbox
+
+See [the SMTP activation runbook](docs/runbooks/smtp-activation.md). Activation requires the provider SMTP hostname, sender address/login and a dedicated app password in ignored `.env`. Startup authenticates with `verify()` before enabling the database mail switch. The default live limit is one email per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically.
+
 For a clean infrastructure start, migration and HTTPS health check:
 
 ```powershell
@@ -109,8 +113,8 @@ npm run smoke:clean-clone
 
 ## Intentionally blocked
 
-Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. Mailbox provider, legal review, corporate sender domain, retention deviations and production host are still owner inputs.
+Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. SMTP remains disabled until the owner selects a mailbox and adds an app password locally.
 
-The public/webhook n8n operator adapter and Stages 3–5 are not activated. There is no mail adapter, provider event processing, public webhook, legal/provider approval, or live pilot path. Local Stage 2 deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment.
+The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local Stage 2 deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment.
 
 Tracked workflow exports intentionally contain no n8n instance IDs. `scripts/prepare-workflow-import.mjs` creates ignored deterministic import copies because the pinned n8n CLI requires a workflow ID at database import time.

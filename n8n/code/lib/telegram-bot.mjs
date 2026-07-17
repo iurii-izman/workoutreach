@@ -16,6 +16,13 @@ const STAGE2_COPY = Object.freeze({
   version: 'Workoutreach local stage 2 · PostgreSQL-backed review · mock outbox · email disabled',
 });
 
+const SMTP_COPY = Object.freeze({
+  start: 'Добрый день! Пришлите одним сообщением публичный URL сайта компании. Я сохраню evidence и черновик в локальном PostgreSQL. После полного preview кнопка «Отправить email» потребует одно явное подтверждение.',
+  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Проверьте адресата, источник, персональную фразу и полный текст.\n3. «Отправить email» создаёт одну локальную команду и отправляет письмо через настроенный SMTP.\n4. Автоматического retry после неизвестного результата нет.\n5. «Перегенерировать» доступно не более двух раз.\n\nКоманды: /status или /status WO-XXXXXX, /help, /version.',
+  status: 'Статус: локальная отправка включена.\nOpenAI: только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: SMTP с ручным подтверждением.\nАвтоповтор: отключён.\nПубличный webhook: отсутствует.',
+  version: 'Workoutreach guarded SMTP · PostgreSQL-backed review · human approval',
+});
+
 function updateIdentity(update) {
   if (update.message) return {
     userId: String(update.message.from?.id ?? ''),
@@ -62,12 +69,12 @@ async function withTyping(client, chatId, task) {
   }
 }
 
-function stage2Preview(preview, callbacks) {
+function stage2Preview(preview, callbacks, mailEnabled = false) {
   return {
     ...preview,
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Отправить (mock)', callback_data: callbacks.mock_send }],
+        [{ text: mailEnabled ? 'Отправить email' : 'Отправить (mock)', callback_data: callbacks.send }],
         [{ text: 'Перегенерировать', callback_data: callbacks.regenerate }],
         [{ text: 'Отклонить', callback_data: callbacks.reject }],
       ],
@@ -104,7 +111,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       let preview = result.telegram_preview;
       if (stateStore) {
         const persisted = await stateStore.persistAnalysis(result, { draftVersion, userId, chatId });
-        preview = stage2Preview(preview, persisted.callbacks);
+        preview = stage2Preview(preview, persisted.callbacks, persisted.mailEnabled);
       }
       const delivery = await client.sendPreview(preview, chatId);
       if (!stateStore) jobs.set(jobId, { inputUrl, regeneration, status: 'DRAFT_READY', createdAt: now(), delivery });
@@ -125,7 +132,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     const chatId = String(message.chat.id);
     const text = String(message.text ?? '').trim();
     const command = text.match(/^\/([a-z]+)(?:@[A-Za-z0-9_]+)?(?:\s|$)/iu)?.[1]?.toLowerCase();
-    const copy = stateStore ? STAGE2_COPY : BOT_COPY;
+    const copy = stateStore?.mailEnabled ? SMTP_COPY : (stateStore ? STAGE2_COPY : BOT_COPY);
     if (command === 'start') { await client.sendText(chatId, copy.start); return { ok: true, action: 'start' }; }
     if (command === 'help') { await client.sendText(chatId, copy.help); return { ok: true, action: 'help' }; }
     if (command === 'status') {
@@ -139,6 +146,23 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       return { ok: true, action: 'status' };
     }
     if (command === 'version') { await client.sendText(chatId, copy.version); return { ok: true, action: 'version' }; }
+    if (command === 'approve') {
+      const jobId = text.match(/\b(WO-[A-Z0-9]{6})\b/u)?.[1];
+      if (!stateStore?.mailEnabled || !jobId) {
+        await client.sendText(chatId, 'Команда доступна только при включённом SMTP: /approve WO-XXXXXX');
+        return { ok: true, action: 'approve_unavailable' };
+      }
+      try {
+        const approval = await stateStore.issueExistingSmtpApproval(jobId, String(message.from.id), chatId);
+        await client.sendText(chatId, `#${jobId}\nАдресат: ${approval.recipient_email}\nТема: ${approval.subject}\n\nИспользуется уже проверенный неизменяемый черновик версии ${approval.draft_version}.`, {
+          replyMarkup: { inline_keyboard: [[{ text: 'Отправить email', callback_data: approval.callbackData }]] },
+        });
+        return { ok: true, action: 'approve_existing', jobId };
+      } catch (error) {
+        await client.sendText(chatId, friendlyFailure(error));
+        return { ok: false, action: 'approve_existing', ...asSafeResult(error) };
+      }
+    }
     if (command) { await client.sendText(chatId, 'Неизвестная команда. Используйте /help или пришлите один URL сайта компании.'); return { ok: true, action: 'unknown_command' }; }
     if (!text || text.split(/\s+/u).length !== 1) {
       await client.sendText(chatId, 'Пришлите одним сообщением только один публичный URL, например: https://company.example/');
@@ -158,22 +182,29 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     const callback = update.callback_query;
     const data = String(callback.data ?? '');
     const match = stateStore
-      ? data.match(/^(mock_send|regenerate|reject):(WO-[A-Z0-9]{6}):[A-Za-z0-9_-]{22,43}$/u)
+      ? data.match(/^(mock_send|smtp_send|regenerate|reject):(WO-[A-Z0-9]{6}):[A-Za-z0-9_-]{22,43}$/u)
       : data.match(/^mock_(send|regenerate|reject):(WO-[A-Z0-9]{6})$/u);
     if (!match) {
       await client.answerCallbackQuery(callback.id, { text: 'Действие устарело или некорректно.' });
       return { ok: true, action: 'invalid_callback' };
     }
     const rawAction = match[1];
-    const action = rawAction === 'mock_send' ? 'send' : rawAction;
+    const action = ['mock_send', 'smtp_send'].includes(rawAction) ? 'send' : rawAction;
     const jobId = match[2];
     const userId = String(callback.from.id);
     const chatId = String(callback.message.chat.id);
     if (stateStore && action === 'send') {
-      const result = await stateStore.approveMock({ callbackData: data, userId, chatId, updateId: update.update_id });
-      const accepted = ['MOCK_OUTBOX_CREATED', 'MOCK_OUTBOX_ALREADY_EXISTS'].includes(result.result_code);
+      const smtp = rawAction === 'smtp_send';
+      const result = smtp
+        ? await stateStore.approveSmtp({ callbackData: data, userId, chatId, updateId: update.update_id })
+        : await stateStore.approveMock({ callbackData: data, userId, chatId, updateId: update.update_id });
+      const accepted = smtp
+        ? ['SMTP_OUTBOX_CREATED', 'SMTP_OUTBOX_ALREADY_EXISTS'].includes(result.result_code)
+        : ['MOCK_OUTBOX_CREATED', 'MOCK_OUTBOX_ALREADY_EXISTS'].includes(result.result_code);
       await client.answerCallbackQuery(callback.id, {
-        text: accepted ? 'Mock-команда сохранена локально. Email не отправлен.' : `Действие остановлено: ${result.result_code}.`,
+        text: accepted
+          ? (smtp ? 'Письмо поставлено в локальную очередь отправки.' : 'Mock-команда сохранена локально. Email не отправлен.')
+          : `Действие остановлено: ${result.result_code}.`,
         showAlert: true,
       });
       if (accepted && callback.message?.message_id != null) await client.clearInlineKeyboard(chatId, callback.message.message_id).catch(() => {});

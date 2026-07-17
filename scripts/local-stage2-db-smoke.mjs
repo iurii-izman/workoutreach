@@ -65,8 +65,8 @@ try {
   const second = await analyze('local-stage2-v2');
   const persistedSecond = await store.persistAnalysis(second, { draftVersion: 2, userId, chatId });
 
-  const approved = await store.approveMock({ callbackData: persistedSecond.callbacks.mock_send, userId, chatId, updateId: 920003 });
-  const replay = await store.approveMock({ callbackData: persistedSecond.callbacks.mock_send, userId, chatId, updateId: 920003 });
+  const approved = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920003 });
+  const replay = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920003 });
   if (approved.result_code !== 'MOCK_OUTBOX_CREATED' || replay.result_code !== approved.result_code) throw new Error('Mock approval replay contract failed');
 
   const counts = await secondPool.query(

@@ -6,6 +6,7 @@ import { analyzeLiveCompany } from '../n8n/code/lib/live-analysis.mjs';
 import { createTelegramClient, parseIdAllowlist } from '../n8n/code/lib/telegram-api.mjs';
 import { createTelegramBotHandler } from '../n8n/code/lib/telegram-bot.mjs';
 import { createPostgresPoolFromEnv, PostgresBotStore } from '../n8n/code/lib/postgres-store.mjs';
+import { createSmtpMailerFromEnv } from '../n8n/code/lib/smtp-mailer.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = join(root, '.runtime');
@@ -16,6 +17,7 @@ const startedAt = new Date().toISOString();
 let stopping = false;
 let lockOwned = false;
 let stateStore = null;
+let smtpMailer = null;
 
 function processAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -86,7 +88,7 @@ async function writeStatus(status, extra = {}) {
     started_at: startedAt,
     heartbeat_at: new Date().toISOString(),
     mode: process.env.BOT_STATE_MODE === 'postgres' ? 'local-postgres-long-polling' : 'allowlisted-long-polling',
-    mail_transport: 'disabled',
+    mail_transport: process.env.MAIL_TRANSPORT ?? 'disabled',
     ...extra,
   }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
 }
@@ -98,9 +100,9 @@ process.on('SIGTERM', requestStop);
 async function main() {
   if ((process.env.TELEGRAM_MODE ?? 'stub') !== 'live-preview') throw new SafeStop('TELEGRAM_MODE_BLOCKED', 'TELEGRAM_MODE must be live-preview');
   if ((process.env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
-  if ((process.env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled' || process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true') {
-    throw new SafeStop('LIVE_SEND_BLOCKED', 'Telegram bot requires mail transmission to remain disabled');
-  }
+  const liveSendEnabled = process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true';
+  const mailTransport = process.env.MAIL_TRANSPORT ?? 'disabled';
+  if ((liveSendEnabled && mailTransport !== 'smtp') || (!liveSendEnabled && mailTransport !== 'disabled')) throw new SafeStop('MAIL_CONFIG_INVALID', 'Mail runtime must be either disabled or explicitly enabled with SMTP');
   await acquireLock();
   const allowlist = {
     userIds: parseIdAllowlist(process.env.ALLOWED_TELEGRAM_USER_IDS),
@@ -112,9 +114,19 @@ async function main() {
       pool: createPostgresPoolFromEnv(process.env),
       suppressionHmacKey: process.env.SUPPRESSION_HMAC_KEY,
       modelId: process.env.OPENAI_MODEL ?? 'gpt-5.6',
+      mailEnabled: liveSendEnabled,
     });
     await stateStore.verifyReady();
     await stateStore.syncAllowlist(allowlist);
+    const dailySendLimit = Number(process.env.DAILY_SEND_LIMIT ?? 0);
+    if (liveSendEnabled) {
+      if (!Number.isSafeInteger(dailySendLimit) || dailySendLimit < 1 || dailySendLimit > 5) throw new SafeStop('DAILY_SEND_LIMIT_INVALID', 'Live SMTP requires a daily send limit from 1 to 5');
+      smtpMailer = createSmtpMailerFromEnv(process.env);
+      await smtpMailer.verify();
+      await stateStore.syncMailRuntime({ enabled: true, dailyLimit: dailySendLimit });
+    } else {
+      await stateStore.syncMailRuntime({ enabled: false, dailyLimit: 0 });
+    }
   }
   const client = createTelegramClient({ botToken: process.env.TELEGRAM_BOT_TOKEN, allowedChatIds: allowlist.chatIds });
   const webhook = await client.call('getWebhookInfo');
@@ -136,7 +148,7 @@ async function main() {
   });
   let offset = await readOffset();
   await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });
-  console.log(JSON.stringify({ event: 'telegram_bot_started', ok: true, mail_transport: 'disabled' }));
+  console.log(JSON.stringify({ event: 'telegram_bot_started', ok: true, mail_transport: mailTransport }));
 
   while (!stopping) {
     let updates;
@@ -159,6 +171,21 @@ async function main() {
       offset = update.update_id + 1;
       await writeState(offset);
     }
+    if (smtpMailer && stateStore) {
+      const workerId = 'local-smtp-worker';
+      const queued = await stateStore.claimNextSmtp(workerId);
+      if (queued) {
+        try {
+          const delivery = await smtpMailer.sendDraft(queued);
+          if (!await stateStore.completeSmtp(queued.outbox_id, workerId, delivery.messageId)) throw new SafeStop('SMTP_STATE_LOST', 'SMTP acceptance could not be persisted');
+          await client.sendText(String(queued.telegram_chat_id), `#${queued.job_id}\nSMTP-провайдер принял письмо. Это не подтверждает доставку во входящие.`).catch(() => {});
+        } catch (error) {
+          const safe = asSafeResult(error);
+          await stateStore.failSmtp(queued.outbox_id, workerId, safe.code).catch(() => {});
+          await client.sendText(String(queued.telegram_chat_id), `#${queued.job_id}\nОтправка безопасно остановлена. Код: ${safe.code}. Автоматического повтора нет, чтобы исключить дубль.`).catch(() => {});
+        }
+      }
+    }
     await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });
   }
 }
@@ -174,5 +201,6 @@ try {
   process.exitCode = 1;
 } finally {
   if (stateStore) await stateStore.close().catch(() => {});
+  smtpMailer?.close();
   if (lockOwned) await rm(lockPath, { force: true });
 }

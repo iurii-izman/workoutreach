@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const lock = JSON.parse(await readFile(resolve(root, 'package-lock.json'), 'utf8'));
-const allowed = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', 'BlueOak-1.0.0']);
+const allowed = new Set(['MIT', 'MIT-0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', 'BlueOak-1.0.0']);
 const reviewed = [];
 const rejected = [];
 for (const [path, value] of Object.entries(lock.packages ?? {})) {

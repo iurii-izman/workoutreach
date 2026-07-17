@@ -936,6 +936,9 @@ Gate: 0 дублей во всех повторных и конкурентны�
 - webhook/polling events;
 - reply и suppression runbooks;
 - тестовые письма только на адреса владельца.
+- минимальный локальный adapter может использовать authenticated SMTP submission на 465/587 с TLS 1.2+, dedicated app password в Docker Secret и default daily limit 1;
+- после SMTP acceptance неизвестный/оборванный результат автоматически не повторяется, чтобы исключить дубль;
+- перед каждой отправкой CV повторно проверяется по filename, PDF signature, size и утверждённому SHA-256.
 
 Gate: владелец подтверждает тесты, provider policy, DNS и rollback.
 

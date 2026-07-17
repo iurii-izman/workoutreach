@@ -29,7 +29,7 @@ do {
       postgres = 'internal-only'
       n8n = 'local-only'
       public_webhook = $false
-      mail_transport = 'disabled'
+      mail_transport = 'see npm run local:status'
     } | ConvertTo-Json
     exit 0
   }

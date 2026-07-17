@@ -14,6 +14,9 @@ const required = {
   telegram_allowed_user_ids: process.env.ALLOWED_TELEGRAM_USER_IDS,
   telegram_allowed_chat_ids: process.env.ALLOWED_TELEGRAM_CHAT_IDS,
   cv_attachment_sha256: process.env.CV_ATTACHMENT_SHA256,
+  smtp_user: process.env.SMTP_USER || 'disabled',
+  smtp_password: process.env.SMTP_PASSWORD || 'disabled',
+  mail_from_address: process.env.MAIL_FROM_ADDRESS || 'disabled',
 };
 
 if (!/^sk-[A-Za-z0-9_-]{20,}$/u.test(String(required.openai_api_key ?? ''))) throw new SafeStop('OPENAI_CREDENTIAL_MISSING', 'A usable OpenAI API key is required in ignored .env');
@@ -22,6 +25,11 @@ if (!/^-?\d+(,-?\d+)*$/u.test(String(required.telegram_allowed_user_ids ?? '')) 
   throw new SafeStop('TELEGRAM_ALLOWLIST_INVALID', 'Numeric Telegram allowlists are required in ignored .env');
 }
 if (!/^[0-9a-f]{64}$/u.test(String(required.cv_attachment_sha256 ?? '').toLowerCase())) throw new SafeStop('ATTACHMENT_HASH_INVALID', 'CV SHA-256 is required in ignored .env');
+if (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true') {
+  if ((process.env.MAIL_TRANSPORT ?? '') !== 'smtp' || required.smtp_user === 'disabled' || required.smtp_password === 'disabled' || required.mail_from_address === 'disabled') {
+    throw new SafeStop('SMTP_CREDENTIAL_MISSING', 'Enabled SMTP requires user, password and sender address in ignored .env');
+  }
+}
 
 for (const [name, value] of Object.entries(required)) {
   const path = join(target, name);
@@ -39,4 +47,4 @@ try {
 }
 await chmod(hmacPath, 0o600);
 
-console.log(JSON.stringify({ ok: true, target: '.secrets', runtime_secret_files: 6, plaintext_exposed: false }));
+console.log(JSON.stringify({ ok: true, target: '.secrets', runtime_secret_files: 9, plaintext_exposed: false }));

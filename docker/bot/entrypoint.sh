@@ -15,6 +15,9 @@ read_secret SUPPRESSION_HMAC_KEY /run/secrets/suppression_hmac_key
 read_secret ALLOWED_TELEGRAM_USER_IDS /run/secrets/telegram_allowed_user_ids
 read_secret ALLOWED_TELEGRAM_CHAT_IDS /run/secrets/telegram_allowed_chat_ids
 read_secret CV_ATTACHMENT_SHA256 /run/secrets/cv_attachment_sha256
+read_secret SMTP_USER /run/secrets/smtp_user
+read_secret SMTP_PASSWORD /run/secrets/smtp_password
+read_secret MAIL_FROM_ADDRESS /run/secrets/mail_from_address
 
 export CV_ATTACHMENT_PATH=/run/workoutreach/cv/Iurii_Izman_CV_Bitrix24_AI.pdf
 export CV_ATTACHMENT_FILENAME=Iurii_Izman_CV_Bitrix24_AI.pdf

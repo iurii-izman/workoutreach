@@ -19,9 +19,12 @@ services:
       OPENAI_MAX_OUTPUT_TOKENS: ${LOCAL_OPENAI_MAX_OUTPUT_TOKENS:-1200}
       TELEGRAM_MODE: live-preview
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
-      MAIL_TRANSPORT: disabled
-      LIVE_SEND_ENABLED: "false"
-      DAILY_SEND_LIMIT: "0"
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-disabled}
+      LIVE_SEND_ENABLED: ${LIVE_SEND_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-disabled.invalid}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Юрий Изман}
+      DAILY_SEND_LIMIT: ${DAILY_SEND_LIMIT:-0}
       DAILY_ANALYSIS_LIMIT: ${DAILY_ANALYSIS_LIMIT:-2}
       REVIEW_TTL_HOURS: ${REVIEW_TTL_HOURS:-24}
       MAX_REGENERATIONS: ${MAX_REGENERATIONS:-2}
@@ -40,6 +43,9 @@ services:
       - telegram_allowed_user_ids
       - telegram_allowed_chat_ids
       - cv_attachment_sha256
+      - smtp_user
+      - smtp_password
+      - mail_from_address
     volumes:
       - workoutreach_bot_runtime:/workoutreach/.runtime
       - type: bind
@@ -82,6 +88,12 @@ secrets:
     file: ./.secrets/telegram_allowed_chat_ids
   cv_attachment_sha256:
     file: ./.secrets/cv_attachment_sha256
+  smtp_user:
+    file: ./.secrets/smtp_user
+  smtp_password:
+    file: ./.secrets/smtp_password
+  mail_from_address:
+    file: ./.secrets/mail_from_address
 
 volumes:
   workoutreach_bot_runtime:

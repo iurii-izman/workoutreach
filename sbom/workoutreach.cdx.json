@@ -292,6 +292,19 @@
     },
     {
       "type": "library",
+      "name": "nodemailer",
+      "version": "9.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "purl": "pkg:npm/nodemailer@9.0.3"
+    },
+    {
+      "type": "library",
       "name": "nth-check",
       "version": "2.1.1",
       "licenses": [

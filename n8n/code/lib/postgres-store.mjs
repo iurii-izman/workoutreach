@@ -37,21 +37,27 @@ export function createPostgresPoolFromEnv(env = process.env) {
 }
 
 export class PostgresBotStore {
-  constructor({ pool, suppressionHmacKey, modelId: configuredModelId = 'gpt-5.6' } = {}) {
+  constructor({ pool, suppressionHmacKey, modelId: configuredModelId = 'gpt-5.6', mailEnabled = false } = {}) {
     if (!pool || !suppressionHmacKey) throw new TypeError('PostgreSQL pool and suppression HMAC key are required');
     this.pool = pool;
     this.suppressionHmacKey = suppressionHmacKey;
     this.configuredModelId = configuredModelId;
+    this.mailEnabled = mailEnabled === true;
   }
 
   async verifyReady() {
-    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
+    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
     const row = result.rows[0];
     if (!row?.ready) throw new SafeStop('DATABASE_MIGRATION_MISSING', 'Local Stage-2 runtime and model-budget migrations are required');
     if (row.live_send_enabled || row.mail_transport !== 'disabled' || Number(row.daily_send_limit) !== 0 || !row.kill_switch_enabled) {
       throw new SafeStop('STAGE2_SAFETY_BLOCK', 'Database safety controls do not permit the local mock runtime');
     }
     return true;
+  }
+
+  async syncMailRuntime({ enabled = false, dailyLimit = 0 } = {}) {
+    await this.pool.query('SELECT workoutreach.configure_local_smtp_runtime($1,$2)', [enabled === true, asInteger(dailyLimit, 'daily_send_limit')]);
+    this.mailEnabled = enabled === true;
   }
 
   async syncAllowlist({ userIds, chatIds }) {
@@ -215,7 +221,8 @@ export class PostgresBotStore {
       await client.query("UPDATE workoutreach.jobs SET status='DRAFT_READY',error_code=NULL WHERE job_id=$1", [result.job_id]);
 
       const callbacks = {};
-      for (const action of ['mock_send', 'regenerate', 'reject']) {
+      const sendAction = this.mailEnabled ? 'smtp_send' : 'mock_send';
+      for (const action of [sendAction, 'regenerate', 'reject']) {
         const token = await client.query(
           'SELECT callback_data,expires_at FROM workoutreach.issue_local_review_token($1,$2,$3,$4,$5)',
           [result.job_id, version, action, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
@@ -237,7 +244,7 @@ export class PostgresBotStore {
       );
       if (completedRun.rowCount !== 1) throw new SafeStop('MODEL_BUDGET_RESERVATION_MISSING', 'Analysis cannot be persisted without one reserved model-budget row');
       await client.query('COMMIT');
-      return { callbacks, draftVersion: version };
+      return { callbacks: { send: callbacks[sendAction], regenerate: callbacks.regenerate, reject: callbacks.reject }, draftVersion: version, mailEnabled: this.mailEnabled };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -281,6 +288,29 @@ export class PostgresBotStore {
     return result.rows[0] ?? { result_code: 'APPROVAL_FAILED' };
   }
 
+  async approveSmtp({ callbackData, userId, chatId, updateId }) {
+    const result = await this.pool.query(
+      'SELECT result_code,outbox_id,job_status FROM workoutreach.handle_smtp_send_callback($1,$2,$3,$4)',
+      [callbackData, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id'), `tg:${asInteger(updateId, 'update_id')}`],
+    );
+    return result.rows[0] ?? { result_code: 'APPROVAL_FAILED' };
+  }
+
+  async claimNextSmtp(workerId) {
+    const result = await this.pool.query('SELECT * FROM workoutreach.claim_next_smtp_outbox($1)', [String(workerId)]);
+    return result.rows[0] ?? null;
+  }
+
+  async completeSmtp(outboxId, workerId, providerMessageId) {
+    const result = await this.pool.query('SELECT workoutreach.complete_smtp_outbox($1,$2,$3) AS completed', [asInteger(outboxId, 'outbox_id'), String(workerId), String(providerMessageId)]);
+    return result.rows[0]?.completed === true;
+  }
+
+  async failSmtp(outboxId, workerId, safeCode) {
+    const result = await this.pool.query('SELECT workoutreach.fail_smtp_outbox($1,$2,$3) AS failed', [asInteger(outboxId, 'outbox_id'), String(workerId), String(safeCode)]);
+    return result.rows[0]?.failed === true;
+  }
+
   async applyReviewAction({ callbackData, userId, chatId, updateId }) {
     const result = await this.pool.query(
       'SELECT result_code,job_id,draft_version,canonical_url,job_status FROM workoutreach.handle_local_review_action($1,$2,$3,$4)',
@@ -300,6 +330,32 @@ export class PostgresBotStore {
       [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
     );
     return result.rows[0] ?? null;
+  }
+
+  async issueExistingSmtpApproval(jobId, userId, chatId) {
+    if (!this.mailEnabled) throw new SafeStop('LIVE_SEND_BLOCKED', 'SMTP runtime is disabled');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const draft = await client.query(
+        `SELECT j.job_id,j.status,d.draft_version,d.recipient_email,d.subject
+         FROM workoutreach.jobs j JOIN LATERAL (
+           SELECT draft_version,recipient_email,subject FROM workoutreach.drafts WHERE job_id=j.job_id ORDER BY draft_version DESC LIMIT 1
+         ) d ON true
+         WHERE j.job_id=$1 AND j.telegram_user_id=$2 AND j.telegram_chat_id=$3 FOR UPDATE OF j`,
+        [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+      );
+      const row = draft.rows[0];
+      if (!row || row.status !== 'DRAFT_READY') throw new SafeStop('APPROVAL_STATE_INVALID', 'Only an owned ready draft can receive a new SMTP approval');
+      const token = await client.query('SELECT callback_data FROM workoutreach.issue_local_review_token($1,$2,$3,$4,$5)', [jobId, row.draft_version, 'smtp_send', asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')]);
+      await client.query('COMMIT');
+      return { ...row, callbackData: token.rows[0].callback_data };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async close() { await this.pool.end(); }

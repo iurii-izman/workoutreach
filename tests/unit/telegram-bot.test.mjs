@@ -7,7 +7,7 @@ function createFakeClient() {
   const events = [];
   return {
     events,
-    async sendText(chatId, text) { events.push({ type: 'text', chatId: String(chatId), text }); return [{ message_id: events.length }]; },
+    async sendText(chatId, text, options = {}) { events.push({ type: 'text', chatId: String(chatId), text, options }); return [{ message_id: events.length }]; },
     async sendPreview(preview, chatId) { events.push({ type: 'preview', chatId: String(chatId), preview }); return { transmitted: true, message_ids: [events.length] }; },
     async sendChatAction(chatId) { events.push({ type: 'action', chatId: String(chatId) }); return true; },
     async answerCallbackQuery(id, options) { events.push({ type: 'callback', id, options }); return true; },
@@ -111,7 +111,7 @@ test('local stage-2 state store reserves budget, persists preview and creates on
       calls.push(['persist', result.job_id]);
       return {
         callbacks: {
-          mock_send: `mock_send:${result.job_id}:${nonce}`,
+          send: `mock_send:${result.job_id}:${nonce}`,
           regenerate: `regenerate:${result.job_id}:${nonce}`,
           reject: `reject:${result.job_id}:${nonce}`,
         },
@@ -145,4 +145,20 @@ test('local stage-2 state store reserves budget, persists preview and creates on
   assert.equal(approved.action, 'MOCK_OUTBOX_CREATED');
   assert.equal(calls.at(-1)[0], 'approve');
   assert.match(client.events.find((event) => event.id === 'callback-stage2').options.text, /Email не отправлен/u);
+});
+
+test('/approve reuses an owned immutable draft without another model call', async () => {
+  const client = createFakeClient();
+  const stateStore = {
+    mailEnabled: true,
+    async issueExistingSmtpApproval(jobId) {
+      assert.equal(jobId, 'WO-ABC234');
+      return { recipient_email: 'recipient@example.com', subject: 'Subject', draft_version: 1, callbackData: 'smtp_send:WO-ABC234:abcdefghijklmnopqrstuv' };
+    },
+  };
+  const handler = createTelegramBotHandler({ client, allowlist, stateStore, analyze: async () => assert.fail('analysis must not run') });
+  const result = await handler.handleUpdate(messageUpdate(30, '/approve WO-ABC234'));
+  assert.equal(result.action, 'approve_existing');
+  assert.match(client.events[0].text, /неизменяемый черновик версии 1/u);
+  assert.equal(client.events[0].options.replyMarkup.inline_keyboard[0][0].callback_data, 'smtp_send:WO-ABC234:abcdefghijklmnopqrstuv');
 });

@@ -30,6 +30,7 @@
     "sbom": "node scripts/generate-sbom.mjs",
     "verify": "node scripts/verify.mjs",
     "smoke:stage2-db": "node scripts/stage2-db-smoke.mjs",
+    "smoke:smtp-db": "node scripts/smtp-db-smoke.mjs",
     "smoke:backup-restore": "node scripts/backup-restore-smoke.mjs",
     "smoke:docker": "node scripts/smoke.mjs",
     "smoke:clean-clone": "node scripts/clean-clone.mjs"
@@ -38,6 +39,7 @@
     "ajv": "8.20.0",
     "cheerio": "1.2.0",
     "ipaddr.js": "2.4.0",
+    "nodemailer": "9.0.3",
     "pg": "8.22.0"
   }
 }

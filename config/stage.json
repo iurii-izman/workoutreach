@@ -21,5 +21,12 @@
     "state_store": "postgresql",
     "public_webhook": false,
     "daily_analysis_limit_default": 2
+  },
+  "stage3_smtp_foundation": {
+    "adapter_implemented": true,
+    "activated": false,
+    "default_daily_send_limit": 1,
+    "automatic_retry": false,
+    "attachment_revalidated_before_send": true
   }
 }
