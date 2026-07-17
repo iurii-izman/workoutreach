@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0 and 1 provide a reproducible bootstrap, deterministic offline dry-run and an explicit single-company guarded live evaluation. The Stage-2 database foundation adds atomic one-time approval, suppression and a physically mock-only outbox. It cannot send email.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. Stage 2 adds persistent evidence/drafts, atomic one-time approval, suppression and a physically mock-only outbox. It cannot send email.
 
 `TECHNICAL_SPEC.md` is the contract. `AGENTS.md` defines the durable repository isolation and safety policy.
 
@@ -12,6 +12,7 @@ Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype fo
 - Template and candidate profile: owner-approved, versioned and still `sendable=false`; only company name and personalization phrase are dynamic.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
+- Model budget: at most two analyses per UTC day by default; each analysis reserves exactly two Structured Output calls before network access.
 
 ## Prerequisites
 
@@ -19,7 +20,7 @@ Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype fo
 - npm 11 or newer;
 - Docker Desktop with Compose for the optional infrastructure smoke test.
 
-## Verify stages 0–1
+## Verify stages 0–2
 
 ```powershell
 npm ci --ignore-scripts
@@ -51,19 +52,20 @@ npm run live:preview -- https://company.example/
 
 Only after checking the allowlist, add `--telegram` to transmit the review preview. The button remains a physical mock block, and no mail transport or outbox is present.
 
-## Interactive Telegram test bot
+## Local Stage 2 Telegram bot
 
-Configure the bot profile and run the allowlisted local polling adapter:
+The preferred local runtime needs neither a public server nor a domain. It starts PostgreSQL, n8n, the loopback-only HTTPS proxy and one allowlisted Telegram long-polling bot:
 
 ```powershell
-npm run bot:configure
-npm run bot:start
-npm run bot:status
+npm run local:start
+npm run local:status
 ```
 
-The bot answers `/start`, `/help`, `/status`, `/version`, accepts one company URL and returns a complete live preview. `Перегенерировать` is limited to two explicit attempts, `Отклонить` closes the review controls, and `Отправить` is always blocked. Stop the local adapter with `npm run bot:stop` before configuring a webhook or another polling process. See [the test-bot runbook](docs/runbooks/telegram-test-bot.md).
+The bot answers `/start`, `/help`, `/status`, `/version`, accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. `Перегенерировать` is limited to two explicit attempts, `Отклонить` closes the review, and `Отправить (mock)` creates exactly one local outbox row while explicitly reporting that no email was sent.
 
-The local polling bot intentionally remains on the Stage-1 adapter and does not write to PostgreSQL. The verified Stage-2 approval/outbox path is present as an inactive n8n/database foundation; activating it requires the integration checklist in [the Stage-2 activation handoff](docs/handoff/stage-2-activation.md).
+Use `npm run local:stop` to stop containers without deleting their named volumes. Docker Desktop must be running; enable its own “Start Docker Desktop when you sign in” option if the bot should recover automatically after Windows login. Container restart policy is `unless-stopped`. See [the local Stage-2 runbook](docs/runbooks/local-stage2.md).
+
+The conservative default `DAILY_ANALYSIS_LIMIT=2` means no more than four OpenAI calls per UTC day. Set it to `1` in ignored `.env` for single-site calibration. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
 For a clean infrastructure start, migration and HTTPS health check:
 
@@ -92,7 +94,7 @@ npm run smoke:clean-clone
 - `scripts/` — preflight, scans, SBOM, workflow validation and smoke commands;
 - `docs/adr/` and `docs/runbooks/` — decisions and operating procedures.
 
-## Implemented but intentionally inactive
+## Implemented Stage 2 safety boundary
 
 - PostgreSQL migration `003_stage_2_mock_outbox` with one-time hashed approval tokens and 24-hour TTL;
 - recipient suppression by keyed-HMAC fingerprint (the key is never stored in the database);
@@ -101,11 +103,14 @@ npm run smoke:clean-clone
 - second suppression check in the mock dispatcher;
 - inactive, credential-free n8n contracts for approval and mock dispatch;
 - repeatable database backup/restore smoke verification.
+- PostgreSQL-backed allowlisted Telegram long polling with update deduplication and restart recovery;
+- immutable page/contact/analysis/draft persistence and one-time mock-send/regenerate/reject callbacks;
+- database-atomic daily model-analysis reservation before any OpenAI request.
 
 ## Intentionally blocked
 
 Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. Mailbox provider, legal review, corporate sender domain, retention deviations and production host are still owner inputs.
 
-The complete interactive Stage-2 n8n adapter and Stages 3–5 are not activated. There is no mail adapter, provider event processing, production webhook, legal/provider approval, or live pilot path. The currently running local bot remains Stage 1 and therefore still reports `MOCK_SEND_BLOCKED`.
+The public/webhook n8n operator adapter and Stages 3–5 are not activated. There is no mail adapter, provider event processing, public webhook, legal/provider approval, or live pilot path. Local Stage 2 deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment.
 
 Tracked workflow exports intentionally contain no n8n instance IDs. `scripts/prepare-workflow-import.mjs` creates ignored deterministic import copies because the pinned n8n CLI requires a workflow ID at database import time.

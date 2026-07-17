@@ -1,6 +1,6 @@
 # ADR-0006: Stage-2 database mock boundary
 
-Status: accepted
+Status: accepted; local-runtime activation clauses superseded by ADR-0007
 
 ## Context
 
@@ -16,8 +16,8 @@ Stage 2 introduces a PostgreSQL-owned approval transaction and a mock-only outbo
 - The outbox transport is constrained to `mock`, `provider_message_id` must remain null, the daily send limit is zero and the kill switch must remain enabled.
 - Mock dispatch uses `FOR UPDATE SKIP LOCKED` and checks suppression again immediately before accepting the local mock command.
 - n8n exports remain inactive and credential-free. They document the stored-function boundary but are not declared production-ready.
-- The local bot remains Stage 1 until a persistent PostgreSQL credential, HTTPS webhook and connected n8n workflows are deployed and verified.
+- This ADR originally left the operator adapter inactive. ADR-0007 activates the same database boundary through a local PostgreSQL-backed long-polling bot without requiring HTTPS webhook infrastructure.
 
 ## Consequences
 
-Replay and concurrent callback tests can prove exactly one outbox row without any external mail capability. A later mail-adapter migration must deliberately replace the database constraints; changing environment variables alone cannot enable sending. Stage 2 is not fully activated until the handoff checklist is complete.
+Replay and concurrent callback tests can prove exactly one outbox row without any external mail capability. A later mail-adapter migration must deliberately replace the database constraints; changing environment variables alone cannot enable sending. Local Stage 2 activation is governed by ADR-0007 and the revised handoff checklist.

@@ -12,6 +12,11 @@ Implemented scope:
 - repeatable business-database backup/restore smoke;
 - stable local Docker secrets that are created only when missing and never silently rotated behind an existing volume;
 - unit, contract and Docker integration tests.
+- migrations `004_local_stage_2_runtime` and `005_local_model_budget`;
+- PostgreSQL-backed allowlisted local bot with update deduplication and restart recovery;
+- immutable evidence/analysis/draft versions and one-time review actions;
+- atomic daily analysis budget, conservative default two analyses and exactly two reserved model calls per analysis;
+- no public bot/database port and no Telegram webhook requirement.
 
 Verified outcomes:
 
@@ -20,6 +25,7 @@ Verified outcomes:
 - suppression: zero outbox rows;
 - mock dispatch: first claim accepted locally, second claim has no work;
 - external mail transmission: false;
-- restored schema includes migrations 001, 002 and 003.
+- restored schema includes migrations 001–005;
+- local runtime tests use synthetic fixtures and make zero OpenAI, Telegram and mail calls.
 
-This evidence does not claim the local Telegram bot uses PostgreSQL, that the n8n workflows are activated, or that any mail provider exists. Those boundaries remain explicitly blocked.
+The local Telegram bot uses PostgreSQL. The credential-free n8n workflow contracts remain inactive, and no mail provider exists. `Отправить (mock)` records only a local command and never transmits email.

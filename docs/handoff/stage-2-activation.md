@@ -1,56 +1,24 @@
-# Developer handoff: activate Stage 2 without enabling mail
+# Stage 2 activation handoff
 
-This checklist is the next engineering task after the verified database foundation. It does not depend on adding more calibration sites, but it must preserve all current phrase/evidence gates.
+Local Stage 2 is implemented through ADR-0007. A persistent server, public HTTPS domain and Telegram webhook are not prerequisites.
 
-## Goal
+## Implemented path
 
-Replace the temporary in-memory operator state with a persistent n8n/PostgreSQL review path while keeping email physically impossible. A successful result is: URL → current guarded analysis → immutable draft in PostgreSQL → one-time Telegram buttons → atomic mock outbox → precise `email not sent` status after restart/replay.
+URL → allowlisted Telegram long polling → safe crawl/contact extraction → two guarded Structured Output calls → literal/business gates → PostgreSQL evidence and immutable draft → one-time review buttons → atomic mock outbox.
 
-## Preconditions supplied by the owner
+The runtime provides update deduplication, restart recovery, draft versions 1–3, ownership checks, one-time hashed callback tokens, daily model-budget reservation and exact mock status. It contains no SMTP/OAuth/mail adapter, and no environment change alone can make the database outbox sendable.
 
-- a persistent deployment host and HTTPS domain for n8n;
-- confirmation that the existing private Telegram bot will become the webhook bot;
-- a maintenance window to stop the local long-polling process before setting the webhook;
-- backup location and encryption mechanism for production-like data.
+## Acceptance checklist
 
-No mail provider, sender password or OAuth grant is needed or allowed for this task.
+- `npm run verify` and the isolated Docker smoke pass without live OpenAI calls;
+- migrations 001–005 are present;
+- `npm run local:start` and `npm run local:status` report a healthy local PostgreSQL-backed bot;
+- a container restart preserves persisted state;
+- repeated/concurrent approval yields one mock outbox row;
+- `LIVE_SEND_ENABLED=false`, `MAIL_TRANSPORT=disabled`, send limit zero and kill switch enabled;
+- bot/database have no public inbound port and Telegram webhook is absent;
+- tests and logs contain no credentials, allowlist identifiers, CV path/hash or raw callback nonce.
 
-## Implementation sequence
+## Deferred work
 
-1. Start the pinned Compose stack persistently; do not use `smoke:docker`, because that command intentionally destroys its disposable volumes.
-2. Run all migrations through `workoutreach-migrate`. Never edit the production schema manually.
-3. Create one n8n PostgreSQL credential for `workoutreach_app` against `workoutreach_business`. Keep the credential ID only in n8n metadata; workflow exports must remain credential-free.
-4. Populate `operator_allowlist` from the ignored owner allowlist. Do not place IDs in Git, workflow JSON or logs.
-5. Convert the tracked workflow contracts into connected inactive workflows. Keep the reviewed logic in versioned source under `n8n/code/lib/`; do not maintain an untested second copy in Code nodes.
-6. Persist each accepted pipeline result transactionally: job, loaded page evidence, contact candidates, immutable analyses, selected contact fingerprint and immutable draft. Raw HTML remains memory-only.
-7. Compute `recipient_hmac` outside PostgreSQL using `recipientFingerprint()` and a 32-byte-or-longer secret from Docker Secrets. Never store the key or raw email in suppression/audit metadata.
-8. Call `issue_mock_approval_token()` only after the job reaches `DRAFT_READY`. Use the returned callback data once in the final Telegram preview message. Never store or log the raw nonce.
-9. On callback, immediately call `answerCallbackQuery`, validate user/chat allowlist, then call `handle_mock_send_callback()` with an idempotency key derived only from Telegram `update_id`.
-10. Show exact result text: `MOCK_OUTBOX_CREATED` means saved locally; `MOCK_ACCEPTED` means processed by the local mock worker; both must explicitly state that no email was sent.
-11. Connect the inactive `05_mock_dispatch` schedule to `dispatch_next_mock_outbox()`. It must contain no SMTP, Gmail, Outlook, generic HTTP-request or community node.
-12. Implement `/status <job_id>`, `/cancel <job_id>` and restart recovery from PostgreSQL. Authorization must be checked on every read and mutation.
-13. Add DB-backed reject and regenerate actions with one-time nonces. Regenerate may create draft versions 2 and 3 only; every version remains immutable. Contact selection must create a new draft, never update an old draft.
-14. Before setting a webhook, stop the local poller with `npm run bot:stop`; verify `getWebhookInfo` has no competing webhook, then configure the HTTPS webhook with Telegram secret-token verification.
-15. Keep all workflows inactive until the clean-clone, verification, Docker smoke and a dedicated restart/replay test pass.
-
-## Required tests
-
-- unauthorized user and chat independently rejected;
-- duplicate Telegram update creates no second job;
-- expired, invalid, consumed and wrong-owner nonce rejected;
-- two concurrent approvals create exactly one operator action and one outbox row;
-- suppression inserted after approval but before dispatch blocks dispatch;
-- process and container restarts preserve job, draft, nonce and action state;
-- draft/contact versioning remains immutable;
-- webhook replay and out-of-order update handling are idempotent;
-- no success log or Telegram text claims provider or inbox delivery;
-- repository/workflow secret scan remains green;
-- `MAIL_TRANSPORT=disabled`, `LIVE_SEND_ENABLED=false`, daily limit zero and database mock constraints remain unchanged.
-
-## Acceptance gate
-
-Stage 2 may be marked fully active only when the owner can complete the flow through Telegram after a full container restart, repeated/concurrent clicks still yield one mock row, and the runtime has no mail credential or external transmission node. Commit evidence must include sanitized workflow exports, test counts, migration list, restart/replay results and `mail_transmitted=false`.
-
-## Work deliberately deferred
-
-Mailbox adapter selection, SPF/DKIM/DMARC, provider events, unsubscribe endpoint, production daily limits and any real send belong to Stage 3. The exact owner/developer checklist for that stage is in `docs/handoff/stage-3-mail-provider.md`.
+Connecting the inactive n8n workflow contracts to a public webhook is optional and requires a new deployment decision, domain, TLS, webhook secret verification and stopping the poller first. Mail provider selection, corporate sender domain, SPF/DKIM/DMARC, provider events, legal approval and any real send remain Stage 3 work.

@@ -921,8 +921,12 @@ Gate: критерии 1–9 и security tests пройдены; владеле�
 - suppression;
 - concurrency/replay tests;
 - mock transport и точные статусы.
+- локальный allowlisted Telegram `getUpdates` long polling без публичного порта или домена;
+- PostgreSQL как источник истины для update idempotency, evidence, immutable drafts и restart recovery;
+- атомарная резервация дневного бюджета анализа до OpenAI: локальный default 2 анализа UTC/сутки, строго 2 model calls на анализ;
+- n8n доступен локально, но не является обязательным critical path для Stage 2; публичный webhook остаётся будущей опцией.
 
-Gate: 0 дублей во всех повторных и конкурентных тестах.
+Gate: 0 дублей во всех повторных и конкурентных тестах; container restart сохраняет job/draft/action; mail transport отсутствует; тесты не расходуют OpenAI credits.
 
 ### Этап 3 — mailbox adapter
 
@@ -969,7 +973,7 @@ Gate: владелец отдельно разрешает production pilot. А�
 - sender name, reply-to и корпоративный домен;
 - выбранный mailbox provider;
 - Telegram allowlisted user/chat IDs и будущий production-bot token через secret channel;
-- deployment host/domain или решение по HTTPS tunnel;
+- deployment host/domain или решение по HTTPS tunnel — только перед будущим публичным webhook/24×7 deployment, не для локального Stage 2;
 - страны/категории адресатов и подтверждённая политика outreach;
 - желаемые retention и daily limits, если отличаются от defaults ТЗ.
 

@@ -1,0 +1,23 @@
+FROM node:24.18.0-alpine@sha256:4ba75f835bb8802193e4c114572113d4b26f95f6f094f4b5229d2a77773e0afc
+
+WORKDIR /workoutreach
+
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+COPY --chown=node:node n8n/code/lib/ ./n8n/code/lib/
+COPY --chown=node:node scripts/telegram-bot.mjs scripts/telegram-bot-status.mjs scripts/local-stage2-db-smoke.mjs ./scripts/
+COPY --chown=node:node product/ ./product/
+COPY --chown=node:node prompts/ ./prompts/
+COPY --chown=node:node schemas/ ./schemas/
+COPY --chown=node:node templates/ ./templates/
+COPY --chown=node:node fixtures/ ./fixtures/
+COPY --chown=node:node docker/bot/entrypoint.sh /usr/local/bin/workoutreach-bot-entrypoint
+
+RUN mkdir -p /workoutreach/.runtime \
+    && chown node:node /workoutreach/.runtime \
+    && chmod 0700 /workoutreach/.runtime \
+    && chmod 0555 /usr/local/bin/workoutreach-bot-entrypoint
+
+USER node
+ENTRYPOINT ["/usr/local/bin/workoutreach-bot-entrypoint"]

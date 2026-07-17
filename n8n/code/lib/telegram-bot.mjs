@@ -9,6 +9,13 @@ export const BOT_COPY = Object.freeze({
   version: 'Workoutreach stage 1 · guarded live preview · email disabled',
 });
 
+const STAGE2_COPY = Object.freeze({
+  start: 'Добрый день! Я готовлю проверяемые персонализированные письма для карьерного обращения к интеграторам Bitrix24.\n\nПришлите одним сообщением только публичный URL сайта компании. Задание, evidence, черновик и действия сохраняются в локальном PostgreSQL и переживают перезапуск.\n\nEmail-отправка физически отключена: «Отправить» создаёт только локальную mock-запись.',
+  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. Дождитесь preview и проверьте все данные.\n3. «Перегенерировать» создаёт новую неизменяемую версию (максимум две).\n4. «Отклонить» закрывает задание.\n5. «Отправить» создаёт только mock-outbox: email не передаётся наружу.\n\nКоманды: /status или /status WO-XXXXXX, /help, /version.',
+  status: 'Статус: локальный Stage 2 активен.\nOpenAI: guarded live evaluation только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: ОТКЛЮЧЁН.\nOutbox: только mock.\nПубличный сервер и webhook: отсутствуют.',
+  version: 'Workoutreach local stage 2 · PostgreSQL-backed review · mock outbox · email disabled',
+});
+
 function updateIdentity(update) {
   if (update.message) return {
     userId: String(update.message.from?.id ?? ''),
@@ -39,6 +46,7 @@ function friendlyFailure(error) {
     ROBOTS_UNAVAILABLE: 'Не удалось безопасно проверить robots.txt.',
     MODEL_INCOMPLETE: 'Модель не завершила структурированный ответ. Попробуйте позже.',
     MODEL_REFUSAL: 'Модель отказалась обработать этот материал.',
+    DAILY_ANALYSIS_LIMIT: 'Дневной лимит анализа исчерпан. Это защищает баланс OpenAI; повторите после 00:00 UTC или осознанно измените лимит.',
   };
   return `Задание безопасно остановлено.\nКод: ${result.code}\n${messages[result.code] ?? 'Проверьте URL или повторите попытку позже.'}`;
 }
@@ -54,7 +62,20 @@ async function withTyping(client, chatId, task) {
   }
 }
 
-export function createTelegramBotHandler({ client, allowlist, analyze, maxRegenerations = 2, now = () => Date.now() } = {}) {
+function stage2Preview(preview, callbacks) {
+  return {
+    ...preview,
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'Отправить (mock)', callback_data: callbacks.mock_send }],
+        [{ text: 'Перегенерировать', callback_data: callbacks.regenerate }],
+        [{ text: 'Отклонить', callback_data: callbacks.reject }],
+      ],
+    },
+  };
+}
+
+export function createTelegramBotHandler({ client, allowlist, analyze, stateStore = null, maxRegenerations = 2, dailyAnalysisLimit = 2, now = () => Date.now() } = {}) {
   if (!client || !allowlist || typeof analyze !== 'function') throw new TypeError('Telegram bot handler dependencies are required');
   const jobs = new Map();
   const ttlMs = 24 * 60 * 60 * 1000;
@@ -65,19 +86,35 @@ export function createTelegramBotHandler({ client, allowlist, analyze, maxRegene
     while (jobs.size > 100) jobs.delete(jobs.keys().next().value);
   }
 
-  async function executeAnalysis({ inputUrl, chatId, seed, regeneration = 0 }) {
-    const jobId = makeJobId(seed);
-    jobs.set(jobId, { inputUrl, regeneration, status: 'ANALYZING', createdAt: now() });
-    await client.sendText(chatId, `${regeneration ? 'Перегенерация' : 'Принято'} · #${jobId}\nПроверяю сайт, опубликованные контакты и evidence. Обычно это занимает до минуты.`);
+  async function executeAnalysis({ inputUrl, chatId, userId, updateId, seed, regeneration = 0, jobId = makeJobId(seed), draftVersion = regeneration + 1, begin = true }) {
+    if (stateStore && begin) {
+      const started = await stateStore.beginJob({ updateId, jobId, inputUrl, userId, chatId });
+      if (started.replay) {
+        const status = started.job?.status ?? 'UNKNOWN';
+        await client.sendText(chatId, `Обновление уже обработано · #${started.job?.job_id ?? jobId}\nТекущий статус: ${status}.`);
+        return { ok: true, jobId: started.job?.job_id ?? jobId, status, idempotentReplay: true };
+      }
+    }
+    if (!stateStore) jobs.set(jobId, { inputUrl, regeneration, status: 'ANALYZING', createdAt: now() });
     try {
-      const result = await withTyping(client, chatId, () => analyze({ inputUrl, seed }));
+      if (stateStore) await stateStore.reserveAnalysis(jobId, draftVersion, dailyAnalysisLimit);
+      await client.sendText(chatId, `${regeneration ? 'Перегенерация' : 'Принято'} · #${jobId}\nПроверяю сайт, опубликованные контакты и evidence. Обычно это занимает до минуты.`);
+      const result = await withTyping(client, chatId, () => analyze({ inputUrl, seed, jobId }));
       if (result.job_id !== jobId) throw new SafeStop('BOT_JOB_ID_MISMATCH', 'Analysis returned an unexpected job identifier');
-      const delivery = await client.sendPreview(result.telegram_preview, chatId);
-      jobs.set(jobId, { inputUrl, regeneration, status: 'DRAFT_READY', createdAt: now(), delivery });
+      let preview = result.telegram_preview;
+      if (stateStore) {
+        const persisted = await stateStore.persistAnalysis(result, { draftVersion, userId, chatId });
+        preview = stage2Preview(preview, persisted.callbacks);
+      }
+      const delivery = await client.sendPreview(preview, chatId);
+      if (!stateStore) jobs.set(jobId, { inputUrl, regeneration, status: 'DRAFT_READY', createdAt: now(), delivery });
       return { ok: true, jobId, status: 'DRAFT_READY' };
     } catch (error) {
-      const job = jobs.get(jobId);
-      if (job) jobs.set(jobId, { ...job, status: 'FAILED' });
+      if (stateStore) await stateStore.failJob(jobId, asSafeResult(error).code).catch(() => {});
+      else {
+        const job = jobs.get(jobId);
+        if (job) jobs.set(jobId, { ...job, status: 'FAILED' });
+      }
       await client.sendText(chatId, friendlyFailure(error)).catch(() => {});
       return { ok: false, jobId, ...asSafeResult(error) };
     }
@@ -88,10 +125,20 @@ export function createTelegramBotHandler({ client, allowlist, analyze, maxRegene
     const chatId = String(message.chat.id);
     const text = String(message.text ?? '').trim();
     const command = text.match(/^\/([a-z]+)(?:@[A-Za-z0-9_]+)?(?:\s|$)/iu)?.[1]?.toLowerCase();
-    if (command === 'start') { await client.sendText(chatId, BOT_COPY.start); return { ok: true, action: 'start' }; }
-    if (command === 'help') { await client.sendText(chatId, BOT_COPY.help); return { ok: true, action: 'help' }; }
-    if (command === 'status') { await client.sendText(chatId, BOT_COPY.status); return { ok: true, action: 'status' }; }
-    if (command === 'version') { await client.sendText(chatId, BOT_COPY.version); return { ok: true, action: 'version' }; }
+    const copy = stateStore ? STAGE2_COPY : BOT_COPY;
+    if (command === 'start') { await client.sendText(chatId, copy.start); return { ok: true, action: 'start' }; }
+    if (command === 'help') { await client.sendText(chatId, copy.help); return { ok: true, action: 'help' }; }
+    if (command === 'status') {
+      const jobId = text.match(/\b(WO-[A-Z0-9]{6})\b/u)?.[1];
+      if (stateStore && jobId) {
+        const job = await stateStore.getAuthorizedJob(jobId, String(message.from.id), chatId);
+        await client.sendText(chatId, job
+          ? `#${job.job_id}\nСтатус задания: ${job.status}\nВерсия черновика: ${job.draft_version ?? '—'}\nMock outbox: ${job.outbox_status ?? 'не создан'}\nEmail отправлен: нет.`
+          : 'Задание не найдено или недоступно.');
+      } else await client.sendText(chatId, copy.status);
+      return { ok: true, action: 'status' };
+    }
+    if (command === 'version') { await client.sendText(chatId, copy.version); return { ok: true, action: 'version' }; }
     if (command) { await client.sendText(chatId, 'Неизвестная команда. Используйте /help или пришлите один URL сайта компании.'); return { ok: true, action: 'unknown_command' }; }
     if (!text || text.split(/\s+/u).length !== 1) {
       await client.sendText(chatId, 'Пришлите одним сообщением только один публичный URL, например: https://company.example/');
@@ -104,21 +151,65 @@ export function createTelegramBotHandler({ client, allowlist, analyze, maxRegene
       await client.sendText(chatId, 'URL не прошёл безопасную проверку. Разрешены только публичные http/https адреса без логина, fragment и нестандартного порта.');
       return { ok: true, action: 'invalid_url' };
     }
-    return executeAnalysis({ inputUrl, chatId, seed: `telegram-update-${update.update_id}` });
+    return executeAnalysis({ inputUrl, chatId, userId: String(message.from.id), updateId: update.update_id, seed: `telegram-update-${update.update_id}` });
   }
 
   async function handleCallback(update) {
     const callback = update.callback_query;
     const data = String(callback.data ?? '');
-    const match = data.match(/^mock_(send|regenerate|reject):(WO-[A-Z0-9]{6})$/u);
+    const match = stateStore
+      ? data.match(/^(mock_send|regenerate|reject):(WO-[A-Z0-9]{6}):[A-Za-z0-9_-]{22,43}$/u)
+      : data.match(/^mock_(send|regenerate|reject):(WO-[A-Z0-9]{6})$/u);
     if (!match) {
       await client.answerCallbackQuery(callback.id, { text: 'Действие устарело или некорректно.' });
       return { ok: true, action: 'invalid_callback' };
     }
-    const [, action, jobId] = match;
-    if (action === 'send') {
+    const rawAction = match[1];
+    const action = rawAction === 'mock_send' ? 'send' : rawAction;
+    const jobId = match[2];
+    const userId = String(callback.from.id);
+    const chatId = String(callback.message.chat.id);
+    if (stateStore && action === 'send') {
+      const result = await stateStore.approveMock({ callbackData: data, userId, chatId, updateId: update.update_id });
+      const accepted = ['MOCK_OUTBOX_CREATED', 'MOCK_OUTBOX_ALREADY_EXISTS'].includes(result.result_code);
+      await client.answerCallbackQuery(callback.id, {
+        text: accepted ? 'Mock-команда сохранена локально. Email не отправлен.' : `Действие остановлено: ${result.result_code}.`,
+        showAlert: true,
+      });
+      if (accepted && callback.message?.message_id != null) await client.clearInlineKeyboard(chatId, callback.message.message_id).catch(() => {});
+      return { ok: true, action: result.result_code, jobId, outboxId: result.outbox_id ?? null };
+    }
+    if (!stateStore && action === 'send') {
       await client.answerCallbackQuery(callback.id, { text: 'Email-отправка физически заблокирована на этапе 1.', showAlert: true });
       return { ok: true, action: 'MOCK_SEND_BLOCKED', jobId };
+    }
+    if (stateStore) {
+      const result = await stateStore.applyReviewAction({ callbackData: data, userId, chatId, updateId: update.update_id });
+      if (action === 'reject') {
+        await client.answerCallbackQuery(callback.id, { text: result.result_code === 'REJECTED' ? 'Черновик отклонён.' : `Действие остановлено: ${result.result_code}.`, showAlert: result.result_code !== 'REJECTED' });
+        if (result.result_code === 'REJECTED' && callback.message?.message_id != null) await client.clearInlineKeyboard(chatId, callback.message.message_id).catch(() => {});
+        return { ok: true, action: result.result_code, jobId };
+      }
+      if (result.result_code === 'REGENERATION_LIMIT') {
+        await client.answerCallbackQuery(callback.id, { text: 'Лимит перегенераций исчерпан.', showAlert: true });
+        return { ok: true, action: result.result_code, jobId };
+      }
+      if (result.result_code !== 'REGENERATION_STARTED' || result.job_status !== 'ANALYZING') {
+        await client.answerCallbackQuery(callback.id, { text: `Действие уже обработано или недоступно: ${result.result_code}.`, showAlert: true });
+        return { ok: true, action: result.result_code, jobId };
+      }
+      await client.answerCallbackQuery(callback.id, { text: 'Перегенерация запущена.' });
+      return executeAnalysis({
+        inputUrl: result.canonical_url,
+        chatId,
+        userId,
+        updateId: update.update_id,
+        seed: `telegram-update-${update.update_id}-regeneration-${Number(result.draft_version) + 1}`,
+        regeneration: Number(result.draft_version),
+        draftVersion: Number(result.draft_version) + 1,
+        jobId,
+        begin: false,
+      });
     }
     if (action === 'reject') {
       await client.answerCallbackQuery(callback.id, { text: 'Черновик отклонён.' });

@@ -1,6 +1,6 @@
 # ADR-0005: Stage-1 local Telegram long polling
 
-- Status: Accepted
+- Status: Accepted for Stage 1; runtime classification superseded by ADR-0007
 - Date: 2026-07-17
 
 ## Context
@@ -16,7 +16,7 @@ The owner asked for the Telegram test bot to become interactive before a product
 5. Every inline callback is answered immediately. `Отправить` always returns `MOCK_SEND_BLOCKED`; `Отклонить` removes the keyboard; `Перегенерировать` requires an existing in-memory review job and is limited to two explicit attempts.
 6. The public bot profile, Russian descriptions, command menu and command list are configured through the Bot API and read back after writing.
 7. The bot process never receives mail credentials, cannot create an outbox and refuses to start unless `MAIL_TRANSPORT=disabled` and `LIVE_SEND_ENABLED=false`.
-8. This is a local Stage-1 adapter. Production migration still requires PostgreSQL-backed workflow state, n8n orchestration and an HTTPS webhook with secret-token verification.
+8. This decision covered the original in-memory Stage-1 adapter. ADR-0007 replaces it with PostgreSQL-backed local Stage 2; HTTPS webhook infrastructure remains optional future deployment work.
 
 ## Consequences
 

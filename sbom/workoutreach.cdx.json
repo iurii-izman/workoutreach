@@ -357,6 +357,162 @@
     },
     {
       "type": "library",
+      "name": "pg",
+      "version": "8.22.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg@8.22.0"
+    },
+    {
+      "type": "library",
+      "name": "pg-cloudflare",
+      "version": "1.4.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-cloudflare@1.4.0"
+    },
+    {
+      "type": "library",
+      "name": "pg-connection-string",
+      "version": "2.14.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-connection-string@2.14.0"
+    },
+    {
+      "type": "library",
+      "name": "pg-int8",
+      "version": "1.0.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-int8@1.0.1"
+    },
+    {
+      "type": "library",
+      "name": "pg-pool",
+      "version": "3.14.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-pool@3.14.0"
+    },
+    {
+      "type": "library",
+      "name": "pg-protocol",
+      "version": "1.15.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-protocol@1.15.0"
+    },
+    {
+      "type": "library",
+      "name": "pg-types",
+      "version": "2.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pg-types@2.2.0"
+    },
+    {
+      "type": "library",
+      "name": "pgpass",
+      "version": "1.0.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pgpass@1.0.5"
+    },
+    {
+      "type": "library",
+      "name": "postgres-array",
+      "version": "2.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/postgres-array@2.0.0"
+    },
+    {
+      "type": "library",
+      "name": "postgres-bytea",
+      "version": "1.0.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/postgres-bytea@1.0.1"
+    },
+    {
+      "type": "library",
+      "name": "postgres-date",
+      "version": "1.0.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/postgres-date@1.0.7"
+    },
+    {
+      "type": "library",
+      "name": "postgres-interval",
+      "version": "1.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/postgres-interval@1.2.0"
+    },
+    {
+      "type": "library",
       "name": "require-from-string",
       "version": "2.0.2",
       "licenses": [
@@ -380,6 +536,19 @@
         }
       ],
       "purl": "pkg:npm/safer-buffer@2.1.2"
+    },
+    {
+      "type": "library",
+      "name": "split2",
+      "version": "4.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "purl": "pkg:npm/split2@4.2.0"
     },
     {
       "type": "library",
@@ -419,6 +588,19 @@
         }
       ],
       "purl": "pkg:npm/whatwg-mimetype@4.0.0"
+    },
+    {
+      "type": "library",
+      "name": "xtend",
+      "version": "4.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/xtend@4.0.2"
     }
   ]
 }

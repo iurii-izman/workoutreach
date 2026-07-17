@@ -12,9 +12,9 @@
 
 ## Safety boundaries
 
-- `LIVE_SEND_ENABLED` must remain `false` through stages 0 and 1.
+- `LIVE_SEND_ENABLED` must remain `false` through stages 0, 1, and the local Stage 2 mock-review runtime.
 - CI and default dry-run use stub OpenAI, Telegram, and mail transports. An owner-invoked `live:preview` may use the Responses API and may transmit only a review preview to an explicitly allowlisted Telegram test chat. Mail remains disabled, and live credentials stay only in ignored `.env`, Docker Secrets, or n8n credentials.
-- The owner-approved stage-1 test bot may run as one local allowlisted long-polling process with ignored lock, offset, heartbeat and logs under `.runtime/`. It is a temporary pre-webhook adapter, not a production replacement for n8n/PostgreSQL orchestration.
+- The owner-approved Stage 2 bot may run as one local allowlisted long-polling container backed by PostgreSQL. A public webhook is optional future infrastructure, not a prerequisite for the local workflow. Mail remains disabled and approval creates only a mock outbox row.
 - Never print, persist in tracked files, pass to a model, or include in errors any token, API key, allowlist identifier, attachment path, or raw credential response.
 - Unsafe or ambiguous URL, evidence, contact, model, or template input must stop with a typed result. Do not synthesize fallback facts.
 - Every accepted result must include locally verifiable evidence from a loaded synthetic fixture or an explicitly authorized live page.

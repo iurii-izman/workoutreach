@@ -1,0 +1,87 @@
+services:
+  workoutreach-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    image: workoutreach-bot:local-stage2
+    container_name: workoutreach-bot
+    restart: unless-stopped
+    environment:
+      BOT_STATE_MODE: postgres
+      WORKOUTREACH_DB_HOST: workoutreach-postgres
+      WORKOUTREACH_DB_PORT: "5432"
+      WORKOUTREACH_DB_NAME: workoutreach_business
+      WORKOUTREACH_DB_USER: workoutreach_app
+      OPENAI_MODE: live-eval
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
+      OPENAI_STORE: "false"
+      OPENAI_MAX_OUTPUT_TOKENS: ${LOCAL_OPENAI_MAX_OUTPUT_TOKENS:-1200}
+      TELEGRAM_MODE: live-preview
+      TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      MAIL_TRANSPORT: disabled
+      LIVE_SEND_ENABLED: "false"
+      DAILY_SEND_LIMIT: "0"
+      DAILY_ANALYSIS_LIMIT: ${DAILY_ANALYSIS_LIMIT:-2}
+      REVIEW_TTL_HOURS: ${REVIEW_TTL_HOURS:-24}
+      MAX_REGENERATIONS: ${MAX_REGENERATIONS:-2}
+      MAX_PAGES: ${MAX_PAGES:-6}
+      MAX_REDIRECTS: ${MAX_REDIRECTS:-3}
+      PAGE_TIMEOUT_MS: ${PAGE_TIMEOUT_MS:-10000}
+      JOB_TIMEOUT_MS: ${JOB_TIMEOUT_MS:-60000}
+      MAX_RESPONSE_BYTES: ${MAX_RESPONSE_BYTES:-2097152}
+      MAX_CLEAN_TEXT_CHARS: ${MAX_CLEAN_TEXT_CHARS:-120000}
+      TZ: UTC
+    secrets:
+      - openai_api_key
+      - telegram_bot_token
+      - business_db_password
+      - suppression_hmac_key
+      - telegram_allowed_user_ids
+      - telegram_allowed_chat_ids
+      - cv_attachment_sha256
+    volumes:
+      - workoutreach_bot_runtime:/workoutreach/.runtime
+      - type: bind
+        source: ${CV_ATTACHMENT_PATH:?CV_ATTACHMENT_PATH is required in ignored .env}
+        target: /run/workoutreach/cv/Iurii_Izman_CV_Bitrix24_AI.pdf
+        read_only: true
+    networks:
+      - workoutreach_internal
+      - workoutreach_egress
+    depends_on:
+      workoutreach-postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "scripts/telegram-bot-status.mjs"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+secrets:
+  openai_api_key:
+    file: ./.secrets/openai_api_key
+  telegram_bot_token:
+    file: ./.secrets/telegram_bot_token
+  telegram_allowed_user_ids:
+    file: ./.secrets/telegram_allowed_user_ids
+  telegram_allowed_chat_ids:
+    file: ./.secrets/telegram_allowed_chat_ids
+  cv_attachment_sha256:
+    file: ./.secrets/cv_attachment_sha256
+
+volumes:
+  workoutreach_bot_runtime:

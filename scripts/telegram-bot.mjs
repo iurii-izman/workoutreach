@@ -5,6 +5,7 @@ import { asSafeResult, SafeStop } from '../n8n/code/lib/errors.mjs';
 import { analyzeLiveCompany } from '../n8n/code/lib/live-analysis.mjs';
 import { createTelegramClient, parseIdAllowlist } from '../n8n/code/lib/telegram-api.mjs';
 import { createTelegramBotHandler } from '../n8n/code/lib/telegram-bot.mjs';
+import { createPostgresPoolFromEnv, PostgresBotStore } from '../n8n/code/lib/postgres-store.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = join(root, '.runtime');
@@ -14,23 +15,52 @@ const statusPath = join(runtime, 'telegram-bot-status.json');
 const startedAt = new Date().toISOString();
 let stopping = false;
 let lockOwned = false;
+let stateStore = null;
 
 function processAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
+async function processStartTicks(pid) {
+  try {
+    const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+    const fieldsAfterCommand = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/u);
+    return fieldsAfterCommand[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function lockMatchesRunningProcess(value) {
+  const legacyPid = Number(String(value).trim());
+  if (Number.isSafeInteger(legacyPid)) {
+    // Docker guarantees one PID-1 bot per container. A numeric PID-1 lock from
+    // an older container lifecycle is stale because PID 1 is reused on restart.
+    if (process.env.BOT_STATE_MODE === 'postgres' && legacyPid === 1) return false;
+    return processAlive(legacyPid);
+  }
+  try {
+    const lock = JSON.parse(value);
+    if (!processAlive(lock.pid)) return false;
+    const currentTicks = await processStartTicks(lock.pid);
+    return currentTicks === null || lock.start_ticks === currentTicks;
+  } catch {
+    return false;
+  }
+}
+
 async function acquireLock() {
   await mkdir(runtime, { recursive: true });
   try {
     const handle = await open(lockPath, 'wx', 0o600);
-    await handle.writeFile(`${process.pid}\n`, 'utf8');
+    await handle.writeFile(`${JSON.stringify({ pid: process.pid, start_ticks: await processStartTicks(process.pid) })}\n`, 'utf8');
     await handle.close();
     lockOwned = true;
   } catch (error) {
     if (error?.code !== 'EEXIST') throw error;
-    const existingPid = Number((await readFile(lockPath, 'utf8').catch(() => '')).trim());
-    if (processAlive(existingPid)) throw new SafeStop('BOT_ALREADY_RUNNING', 'Telegram bot polling process is already running');
+    const existingLock = await readFile(lockPath, 'utf8').catch(() => '');
+    if (await lockMatchesRunningProcess(existingLock)) throw new SafeStop('BOT_ALREADY_RUNNING', 'Telegram bot polling process is already running');
     await rm(lockPath, { force: true });
     return acquireLock();
   }
@@ -55,7 +85,7 @@ async function writeStatus(status, extra = {}) {
     pid: process.pid,
     started_at: startedAt,
     heartbeat_at: new Date().toISOString(),
-    mode: 'allowlisted-long-polling',
+    mode: process.env.BOT_STATE_MODE === 'postgres' ? 'local-postgres-long-polling' : 'allowlisted-long-polling',
     mail_transport: 'disabled',
     ...extra,
   }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
@@ -77,19 +107,32 @@ async function main() {
     chatIds: parseIdAllowlist(process.env.ALLOWED_TELEGRAM_CHAT_IDS),
   };
   if (allowlist.userIds.size === 0 || allowlist.chatIds.size === 0) throw new SafeStop('TELEGRAM_ALLOWLIST_EMPTY', 'Telegram user and chat allowlists are required');
+  if ((process.env.BOT_STATE_MODE ?? 'memory') === 'postgres') {
+    stateStore = new PostgresBotStore({
+      pool: createPostgresPoolFromEnv(process.env),
+      suppressionHmacKey: process.env.SUPPRESSION_HMAC_KEY,
+      modelId: process.env.OPENAI_MODEL ?? 'gpt-5.6',
+    });
+    await stateStore.verifyReady();
+    await stateStore.syncAllowlist(allowlist);
+  }
   const client = createTelegramClient({ botToken: process.env.TELEGRAM_BOT_TOKEN, allowedChatIds: allowlist.chatIds });
   const webhook = await client.call('getWebhookInfo');
   if (webhook.url) throw new SafeStop('TELEGRAM_WEBHOOK_CONFLICT', 'Long polling cannot start while a webhook is configured');
 
   const maxRegenerations = Number(process.env.MAX_REGENERATIONS ?? 2);
+  const dailyAnalysisLimit = Number(process.env.DAILY_ANALYSIS_LIMIT ?? 2);
   const pollTimeoutSeconds = Number(process.env.TELEGRAM_POLL_TIMEOUT_SECONDS ?? 25);
   if (!Number.isSafeInteger(maxRegenerations) || maxRegenerations < 0 || maxRegenerations > 5) throw new SafeStop('BOT_CONFIG_INVALID', 'MAX_REGENERATIONS must be an integer from 0 to 5');
+  if (!Number.isSafeInteger(dailyAnalysisLimit) || dailyAnalysisLimit < 1 || dailyAnalysisLimit > 20) throw new SafeStop('BOT_CONFIG_INVALID', 'DAILY_ANALYSIS_LIMIT must be an integer from 1 to 20');
   if (!Number.isSafeInteger(pollTimeoutSeconds) || pollTimeoutSeconds < 1 || pollTimeoutSeconds > 50) throw new SafeStop('BOT_CONFIG_INVALID', 'TELEGRAM_POLL_TIMEOUT_SECONDS must be an integer from 1 to 50');
   const handler = createTelegramBotHandler({
     client,
     allowlist,
+    stateStore,
     maxRegenerations,
-    analyze: ({ inputUrl, seed }) => analyzeLiveCompany({ root, inputUrl, seed }),
+    dailyAnalysisLimit,
+    analyze: ({ inputUrl, seed, jobId }) => analyzeLiveCompany({ root, inputUrl, seed, jobId }),
   });
   let offset = await readOffset();
   await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });
@@ -130,5 +173,6 @@ try {
   console.error(JSON.stringify(safe));
   process.exitCode = 1;
 } finally {
+  if (stateStore) await stateStore.close().catch(() => {});
   if (lockOwned) await rm(lockPath, { force: true });
 }

@@ -50,11 +50,11 @@ export async function loadOfferProfile(root, relative = 'product/offer-profile.v
   return JSON.parse(await readFile(join(root, relative), 'utf8'));
 }
 
-export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, seed = inputUrl, mode = 'offline-stub' }) {
+export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
   if (!offerProfile || (!offerProfile.owner_approved && !offerProfile.synthetic_eval)) {
     throw new SafeStop('OFFER_NOT_APPROVED', 'An owner-approved or synthetic-eval offer profile is required');
   }
-  const jobId = makeJobId(seed);
+  if (!/^WO-[A-Z0-9]{6}$/u.test(jobId)) throw new SafeStop('JOB_ID_INVALID', 'Job identifier is outside the canonical contract');
   const crawl = await crawlSite(inputUrl, fetcher, crawlLimits);
   const contacts = deduplicateContacts(crawl.pages.flatMap((page) => extractContactsFromHtml(page._html, page)));
   const contactDecision = chooseContact(contacts, { campaignType: offerProfile.campaign_type ?? 'general_outreach' });
@@ -134,6 +134,13 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     evidence: {
       fact_request_sha256: sha256(stableJson(factRequest)),
       phrase_request_sha256: sha256(stableJson(phraseRequest)),
+      fact_prompt_version: factRequest.metadata.prompt_version,
+      fact_prompt_sha256: factRequest.metadata.prompt_sha256,
+      fact_schema_sha256: factRequest.metadata.schema_sha256,
+      phrase_prompt_version: phraseRequest.metadata.prompt_version,
+      phrase_prompt_sha256: phraseRequest.metadata.prompt_sha256,
+      phrase_schema_sha256: phraseRequest.metadata.schema_sha256,
+      offer_version: offerProfile.version ?? null,
       offer_sha256: sha256(stableJson(offerProfile)),
       template_sha256: draft.template_sha256,
       source_content_sha256: source.content_sha256,

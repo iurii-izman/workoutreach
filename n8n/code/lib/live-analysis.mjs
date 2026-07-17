@@ -10,7 +10,7 @@ function positiveNumber(value, fallback, name) {
   return parsed;
 }
 
-export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, onModelEnvelope = null, modelAdapter = null } = {}) {
+export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, modelAdapter = null } = {}) {
   if (env.LIVE_SEND_ENABLED?.toLowerCase() === 'true' || (env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled') {
     throw new SafeStop('LIVE_SEND_BLOCKED', 'Mail must remain disabled for live analysis');
   }
@@ -22,6 +22,7 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
     root,
     inputUrl,
     seed,
+    jobId,
     fetcher: (url) => safeFetch(url, {
       maxRedirects: positiveNumber(env.MAX_REDIRECTS, 3, 'MAX_REDIRECTS'),
       timeoutMs: positiveNumber(env.PAGE_TIMEOUT_MS, 10_000, 'PAGE_TIMEOUT_MS'),

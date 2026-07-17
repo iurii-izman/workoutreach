@@ -1,5 +1,5 @@
 {
-  "implemented_stages": [0, 1],
+  "implemented_stages": [0, 1, 2],
   "openai_transport": "stub",
   "telegram_transport": "stub",
   "guarded_live_eval": {
@@ -16,6 +16,10 @@
     "n8n_exports": "inactive_credential_free_contracts",
     "mock_outbox_implemented": true,
     "mail_transmission_possible": false,
-    "operator_adapter_activated": false
+    "operator_adapter_activated": true,
+    "operator_adapter": "allowlisted_local_long_polling",
+    "state_store": "postgresql",
+    "public_webhook": false,
+    "daily_analysis_limit_default": 2
   }
 }

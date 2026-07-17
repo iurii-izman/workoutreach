@@ -97,3 +97,52 @@ test('regeneration is explicit and creates a new bounded job', async () => {
   assert.equal(analyses, 2);
   assert.notEqual(regenerated.jobId, first.jobId);
 });
+
+test('local stage-2 state store reserves budget, persists preview and creates only mock outbox', async () => {
+  const client = createFakeClient();
+  const calls = [];
+  let persistedJobId;
+  const nonce = 'abcdefghijklmnopqrstuv';
+  const stateStore = {
+    async beginJob(input) { calls.push(['begin', input.updateId]); return { created: true, replay: false }; },
+    async reserveAnalysis(jobId, version, limit) { calls.push(['reserve', jobId, version, limit]); },
+    async persistAnalysis(result) {
+      persistedJobId = result.job_id;
+      calls.push(['persist', result.job_id]);
+      return {
+        callbacks: {
+          mock_send: `mock_send:${result.job_id}:${nonce}`,
+          regenerate: `regenerate:${result.job_id}:${nonce}`,
+          reject: `reject:${result.job_id}:${nonce}`,
+        },
+      };
+    },
+    async failJob() { assert.fail('successful analysis must not fail'); },
+    async approveMock(input) { calls.push(['approve', input.callbackData]); return { result_code: 'MOCK_OUTBOX_CREATED', outbox_id: 7 }; },
+  };
+  const handler = createTelegramBotHandler({
+    client,
+    allowlist,
+    stateStore,
+    dailyAnalysisLimit: 2,
+    analyze: async ({ jobId }) => ({ job_id: jobId, telegram_preview: { text: 'preview', reply_markup: {} } }),
+  });
+
+  const created = await handler.handleUpdate(messageUpdate(20, 'https://example.com/'));
+  assert.equal(created.status, 'DRAFT_READY');
+  assert.deepEqual(calls.slice(0, 3).map((entry) => entry[0]), ['begin', 'reserve', 'persist']);
+  assert.equal(calls[1][3], 2);
+  const preview = client.events.find((event) => event.type === 'preview').preview;
+  assert.equal(preview.reply_markup.inline_keyboard[0][0].callback_data, `mock_send:${persistedJobId}:${nonce}`);
+
+  const approved = await handler.handleUpdate({
+    update_id: 21,
+    callback_query: {
+      id: 'callback-stage2', from: { id: 101 }, data: `mock_send:${persistedJobId}:${nonce}`,
+      message: { message_id: 15, chat: { id: 202, type: 'private' } },
+    },
+  });
+  assert.equal(approved.action, 'MOCK_OUTBOX_CREATED');
+  assert.equal(calls.at(-1)[0], 'approve');
+  assert.match(client.events.find((event) => event.id === 'callback-stage2').options.text, /Email не отправлен/u);
+});

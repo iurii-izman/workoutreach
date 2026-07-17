@@ -28,7 +28,8 @@ try {
 for (const entry of entries.filter((item) => item.stat.isFile() && /(?:package(?:-lock)?\.json|compose\.ya?ml)$/u.test(item.relative))) {
   const text = await readFile(entry.path, 'utf8');
   if (/"(?:file|link):[^"\n]+"/iu.test(text)) errors.push(`path dependency: ${entry.relative}`);
-  if (/^\s*-\s*(?:[A-Za-z]:[\\/]|\/{1,2}[^/])/mu.test(text)) errors.push(`absolute bind mount: ${entry.relative}`);
+  const absoluteMountLines = text.match(/^\s*-\s*(?:[A-Za-z]:[\\/]|\/{1,2}[^/]).*$/gmu) ?? [];
+  if (absoluteMountLines.some((line) => !/^\s*-\s*\/tmp(?:[:/]|$)/u.test(line))) errors.push(`absolute bind mount: ${entry.relative}`);
 }
 
 for (const entry of entries.filter((item) => item.stat.isFile() && !policyAllowlist.has(item.relative))) {

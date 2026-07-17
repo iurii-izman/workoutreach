@@ -8,7 +8,7 @@ const target = join(root, '.secrets');
 await mkdir(target, { recursive: true });
 let created = 0;
 let reused = 0;
-for (const [name, bytes] of [['postgres_admin_password', 32], ['n8n_db_password', 32], ['business_db_password', 32], ['n8n_encryption_key', 48]]) {
+for (const [name, bytes] of [['postgres_admin_password', 32], ['n8n_db_password', 32], ['business_db_password', 32], ['n8n_encryption_key', 48], ['suppression_hmac_key', 48]]) {
   const path = join(target, name);
   try {
     await writeFile(path, `${randomBytes(bytes).toString('base64url')}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
@@ -21,4 +21,4 @@ for (const [name, bytes] of [['postgres_admin_password', 32], ['n8n_db_password'
     reused += 1;
   }
 }
-console.log(JSON.stringify({ ok: true, mode: 'local-development-only', files: 4, created, reused, path: '.secrets', secrets_rotated: false }));
+console.log(JSON.stringify({ ok: true, mode: 'local-development-only', files: 5, created, reused, path: '.secrets', secrets_rotated: false }));

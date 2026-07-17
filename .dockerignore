@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+.secrets
+.runtime
+artifacts
+coverage
+dist
+node_modules
+sbom
+*.log
+*.tmp
+*.pdf
