@@ -15,7 +15,6 @@ const required = {
   telegram_allowed_chat_ids: process.env.ALLOWED_TELEGRAM_CHAT_IDS,
   cv_attachment_sha256: process.env.CV_ATTACHMENT_SHA256,
   smtp_user: process.env.SMTP_USER || 'disabled',
-  smtp_password: process.env.SMTP_PASSWORD || 'disabled',
   mail_from_address: process.env.MAIL_FROM_ADDRESS || 'disabled',
 };
 
@@ -26,8 +25,8 @@ if (!/^-?\d+(,-?\d+)*$/u.test(String(required.telegram_allowed_user_ids ?? '')) 
 }
 if (!/^[0-9a-f]{64}$/u.test(String(required.cv_attachment_sha256 ?? '').toLowerCase())) throw new SafeStop('ATTACHMENT_HASH_INVALID', 'CV SHA-256 is required in ignored .env');
 if (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true') {
-  if ((process.env.MAIL_TRANSPORT ?? '') !== 'smtp' || required.smtp_user === 'disabled' || required.smtp_password === 'disabled' || required.mail_from_address === 'disabled') {
-    throw new SafeStop('SMTP_CREDENTIAL_MISSING', 'Enabled SMTP requires user, password and sender address in ignored .env');
+  if ((process.env.MAIL_TRANSPORT ?? '') !== 'smtp' || required.smtp_user === 'disabled' || required.mail_from_address === 'disabled') {
+    throw new SafeStop('SMTP_CREDENTIAL_MISSING', 'Enabled SMTP requires user and sender address in ignored .env');
   }
 }
 
@@ -36,6 +35,24 @@ for (const [name, value] of Object.entries(required)) {
   await writeFile(path, `${String(value).trim()}\n`, { encoding: 'utf8', mode: 0o600 });
   await chmod(path, 0o600);
 }
+
+const smtpPasswordPath = join(target, 'smtp_password');
+const suppliedSmtpPassword = String(process.env.SMTP_PASSWORD ?? '').replace(/\s+/gu, '');
+if (suppliedSmtpPassword && suppliedSmtpPassword !== 'disabled') {
+  if (Buffer.byteLength(suppliedSmtpPassword) < 12) throw new SafeStop('SMTP_CREDENTIAL_INVALID', 'SMTP app password is too short');
+  await writeFile(smtpPasswordPath, `${suppliedSmtpPassword}\n`, { encoding: 'utf8', mode: 0o600 });
+} else {
+  try {
+    const existing = (await readFile(smtpPasswordPath, 'utf8')).trim();
+    if (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true' && (existing === 'disabled' || Buffer.byteLength(existing) < 12)) {
+      throw new SafeStop('SMTP_CREDENTIAL_MISSING', 'Enabled SMTP requires an existing app password Docker Secret');
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    await writeFile(smtpPasswordPath, 'disabled\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  }
+}
+await chmod(smtpPasswordPath, 0o600);
 
 const hmacPath = join(target, 'suppression_hmac_key');
 try {

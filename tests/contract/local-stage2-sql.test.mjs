@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const migration = await readFile(resolve(root, 'migrations/004_local_stage_2_runtime.sql'), 'utf8');
 const budgetMigration = await readFile(resolve(root, 'migrations/005_local_model_budget.sql'), 'utf8');
 const smtpMigration = await readFile(resolve(root, 'migrations/006_guarded_smtp_delivery.sql'), 'utf8');
+const sendabilityMigration = await readFile(resolve(root, 'migrations/007_stage_3_template_sendability.sql'), 'utf8');
 const localCompose = await readFile(resolve(root, 'compose.local.yaml'), 'utf8');
 
 test('local review callbacks use hashed one-time tokens and bounded regeneration', () => {
@@ -35,5 +36,7 @@ test('local bot has no public port and guarded SMTP stays disabled by default', 
   assert.match(smtpMigration, /claim_next_smtp_outbox/u);
   assert.match(smtpMigration, /p_daily_limit NOT BETWEEN 1 AND 5/u);
   assert.match(smtpMigration, /pg_advisory_xact_lock/u);
+  assert.match(sendabilityMigration, /v_draft\.sendable<>true/u);
+  assert.match(sendabilityMigration, /d\.sendable=true/u);
   assert.match(localCompose, /cap_drop:\s*\n\s+- ALL/u);
 });

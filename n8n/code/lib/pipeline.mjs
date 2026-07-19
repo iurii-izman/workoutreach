@@ -103,8 +103,6 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     COMPANY_NAME: aggregate.company_name,
   });
   if (attachment) draft.attachment = attachment;
-  if (draft.sendable) throw new SafeStop('DRY_RUN_TEMPLATE_SENDABLE', 'Stage-1 template must remain non-sendable');
-
   const source = pages.find((page) => page.source_id === aggregate.source_id);
   const warnings = [...aggregate.warnings, template.manifest.notice];
   if (mode === 'offline-stub') warnings.push('Telegram transport is stubbed; no message was transmitted');

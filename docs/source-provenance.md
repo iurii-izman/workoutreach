@@ -14,7 +14,7 @@ No local repository outside this root was read, listed, searched, indexed, compa
 
 The CV is an authorized owner input but remains an external read-only runtime asset. Neither the PDF, its local path nor its approval hash is tracked. Only CV-supported claims selected by the owner are represented in the versioned offer profile.
 
-The public Bitrix24 Kazakhstan partner catalog may be used as a future seed source. It has not been converted into a bulk target list, and no catalog entry authorizes transmission.
+The public Bitrix24 Kazakhstan partner catalog is an authorized seed source. `npm run catalog:stage` reads only the catalog and its bounded partner profiles, respects `robots.txt`, makes no model calls, creates only an ignored `REVIEW_REQUIRED` snapshot and never authorizes transmission. On 2026-07-19 the rendered Kazakhstan catalog exposed 12 partner profiles; this dynamic observation must not be generalized to the previously estimated 200+ companies or to other countries.
 
 ## First-commit evidence
 

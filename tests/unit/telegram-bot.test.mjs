@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeJobId } from '../../n8n/code/lib/pipeline.mjs';
 import { BOT_COPY, createTelegramBotHandler, isAuthorizedBotUpdate } from '../../n8n/code/lib/telegram-bot.mjs';
+import { SafeStop } from '../../n8n/code/lib/errors.mjs';
 
 function createFakeClient() {
   const events = [];
@@ -161,4 +162,16 @@ test('/approve reuses an owned immutable draft without another model call', asyn
   assert.equal(result.action, 'approve_existing');
   assert.match(client.events[0].text, /неизменяемый черновик версии 1/u);
   assert.equal(client.events[0].options.replyMarkup.inline_keyboard[0][0].callback_data, 'smtp_send:WO-ABC234:abcdefghijklmnopqrstuv');
+});
+
+test('/approve explains why a legacy non-sendable draft must be recreated', async () => {
+  const client = createFakeClient();
+  const stateStore = {
+    mailEnabled: true,
+    async issueExistingSmtpApproval() { throw new SafeStop('TEMPLATE_NOT_SENDABLE', 'legacy'); },
+  };
+  const handler = createTelegramBotHandler({ client, allowlist, stateStore, analyze: async () => assert.fail('analysis must not run') });
+  const result = await handler.handleUpdate(messageUpdate(31, '/approve WO-ABC234'));
+  assert.equal(result.code, 'TEMPLATE_NOT_SENDABLE');
+  assert.match(client.events[0].text, /Пришлите URL заново/u);
 });

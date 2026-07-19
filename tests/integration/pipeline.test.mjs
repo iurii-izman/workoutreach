@@ -20,7 +20,8 @@ test('synthetic end-to-end pipeline produces a full non-transmitted preview with
   assert.equal(result.analysis.decision, 'READY_FOR_REVIEW');
   assert.ok(result.analysis.source_excerpt.length <= 500);
   assert.match(result.analysis.source_excerpt, /Синтетика Лаб разработала учебный сервис/u);
-  assert.equal(result.draft.sendable, false);
+  assert.equal(result.draft.sendable, true);
+  assert.equal(result.safety.live_send_enabled, false);
   assert.equal(result.telegram_preview.transmitted, false);
   assert.match(result.telegram_preview.text, /ПЕРСОНАЛЬНАЯ ФРАЗА/u);
   assert.match(result.telegram_preview.text, /ИСТОЧНИК/u);

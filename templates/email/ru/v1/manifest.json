@@ -2,7 +2,7 @@
   "version": "email-ru-career-v1",
   "locale": "ru",
   "campaign_type": "career_outreach",
-  "sendable": false,
+  "sendable": true,
   "owner_approved": true,
   "allowed_placeholders": ["COMPANY_NAME", "PERSONALIZATION_PHRASE"],
   "required_placeholders": ["COMPANY_NAME", "PERSONALIZATION_PHRASE"],
@@ -15,5 +15,5 @@
     "sha256_env": "CV_ATTACHMENT_SHA256",
     "tracked_in_git": false
   },
-  "notice": "OWNER-APPROVED TEMPLATE; EMAIL TRANSMISSION REMAINS DISABLED"
+  "notice": "OWNER-APPROVED TEMPLATE; TRANSMISSION REQUIRES EXPLICIT SMTP ACTIVATION AND HUMAN APPROVAL"
 }

@@ -117,6 +117,9 @@ async function main() {
       mailEnabled: liveSendEnabled,
     });
     await stateStore.verifyReady();
+    // Fail closed across container restarts: database delivery is disabled
+    // before any external SMTP authentication attempt can fail or time out.
+    await stateStore.syncMailRuntime({ enabled: false, dailyLimit: 0 });
     await stateStore.syncAllowlist(allowlist);
     const dailySendLimit = Number(process.env.DAILY_SEND_LIMIT ?? 0);
     if (liveSendEnabled) {
@@ -124,8 +127,6 @@ async function main() {
       smtpMailer = createSmtpMailerFromEnv(process.env);
       await smtpMailer.verify();
       await stateStore.syncMailRuntime({ enabled: true, dailyLimit: dailySendLimit });
-    } else {
-      await stateStore.syncMailRuntime({ enabled: false, dailyLimit: 0 });
     }
   }
   const client = createTelegramClient({ botToken: process.env.TELEGRAM_BOT_TOKEN, allowedChatIds: allowlist.chatIds });

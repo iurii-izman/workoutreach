@@ -960,7 +960,7 @@ Gate: владелец отдельно разрешает production pilot. А�
 
 ## 28. Входные материалы от владельца
 
-Статус входных материалов на 2026-07-17:
+Статус входных материалов на 2026-07-19:
 
 Предоставлены и зафиксированы для этапа 1:
 
@@ -970,11 +970,12 @@ Gate: владелец отдельно разрешает production pilot. А�
 - карьерная цель, Казахстан и интеграторы Bitrix24 как первая категория адресатов;
 - OpenAI API key и Telegram test-bot token через ignored `.env`;
 - официальный каталог партнёров Bitrix24 как будущий источник seed URL, без разрешения на массовую обработку или отправку.
+- sender name, reply-to и выбранный личный Gmail mailbox через ignored `.env`; app password должен быть создан владельцем и храниться только как Docker Secret.
 
 Остаются обязательными до соответствующего этапа:
 
-- sender name, reply-to и корпоративный домен;
-- выбранный mailbox provider;
+- Google app password через локальный скрытый prompt и owner-only тест доставки;
+- корпоративный домен и его аутентификация, только если позднее будет выбран доменный sender вместо текущего Gmail;
 - Telegram allowlisted user/chat IDs и будущий production-bot token через secret channel;
 - deployment host/domain или решение по HTTPS tunnel — только перед будущим публичным webhook/24×7 deployment, не для локального Stage 2;
 - страны/категории адресатов и подтверждённая политика outreach;

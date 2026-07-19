@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. A guarded SMTP delivery adapter is implemented but remains disabled until the owner supplies and verifies a mailbox.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. A guarded single-owner Gmail SMTP adapter is implemented but remains disabled until the owner locally supplies and verifies a Google app password.
 
 `TECHNICAL_SPEC.md` is the contract. `AGENTS.md` defines the durable repository isolation and safety policy.
 
@@ -8,8 +8,8 @@ Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype fo
 
 - OpenAI: deterministic stub in CI/default dry-run; an explicit `live:preview` uses the Responses API with strict Structured Outputs, `store=false` and no tools.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
-- Mail: guarded SMTP adapter and at-most-once queue implemented; disabled by default, no mailbox credentials currently configured.
-- Template and candidate profile: owner-approved, versioned and still `sendable=false`; only company name and personalization phrase are dynamic.
+- Mail: guarded Gmail SMTP adapter and at-most-once queue implemented; disabled by default, with no password in `.env` or Git.
+- Template and candidate profile: owner-approved and versioned; only company name and personalization phrase are dynamic. Template eligibility alone cannot enable the disabled-by-default transport.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
 - Model budget: at most two analyses per UTC day by default; each analysis reserves exactly two Structured Output calls before network access.
@@ -67,9 +67,19 @@ Use `npm run local:stop` to stop containers without deleting their named volumes
 
 The conservative default `DAILY_ANALYSIS_LIMIT=2` means no more than four OpenAI calls per UTC day. Set it to `1` in ignored `.env` for single-site calibration. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
-## Activate one SMTP mailbox
+## Stage the Bitrix24 Kazakhstan catalog
 
-See [the SMTP activation runbook](docs/runbooks/smtp-activation.md). Activation requires the provider SMTP hostname, sender address/login and a dedicated app password in ignored `.env`. Startup authenticates with `verify()` before enabling the database mail switch. The default live limit is one email per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically.
+The vendor catalog can be refreshed without OpenAI or email delivery:
+
+```powershell
+npm run catalog:stage
+```
+
+The bounded reader respects `robots.txt`, accepts only canonical Kazakhstan partner profiles and records an ignored `artifacts/catalog/bitrix24-kz-latest.json` snapshot. Every row remains `REVIEW_REQUIRED`; staging never creates a job, model run, recipient, approval or outbox entry. The live catalog exposed 12 partner profiles on 2026-07-19, so the earlier 200+ estimate is not used as a Kazakhstan count.
+
+## Activate the selected Gmail mailbox
+
+See [the Gmail SMTP activation runbook](docs/runbooks/smtp-activation.md). After creating a Google app password, run `npm run gmail:setup`; its hidden prompt stores the credential only in ignored `.secrets/smtp_password` and leaves delivery disabled. `npm run gmail:status` reports state without exposing it. `npm run gmail:self-test` authenticates SMTP and sends the explicit owner-only delivery check; it cannot target a company address. Only a successful self-test enables the database mail switch with a default limit of one campaign email per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically. `npm run gmail:disable` restores all local mail kill switches.
 
 For a clean infrastructure start, migration and HTTPS health check:
 
@@ -92,7 +102,7 @@ npm run smoke:clean-clone
 - `n8n/workflows/` — sanitized, inactive, credential-free workflow contracts;
 - `schemas/` and `prompts/` — canonical model contracts;
 - `evals/` — owner-approved URL-only calibration manifests with hard size limits;
-- `templates/` and `product/` — versioned owner-approved campaign copy/profile, still non-sendable;
+- `templates/` and `product/` — versioned owner-approved campaign copy/profile; template eligibility is distinct from the disabled-by-default runtime transport;
 - `migrations/` — PostgreSQL business-state schema;
 - `fixtures/` — synthetic source/model/offer evidence;
 - `scripts/` — preflight, scans, SBOM, workflow validation and smoke commands;
@@ -113,7 +123,7 @@ npm run smoke:clean-clone
 
 ## Intentionally blocked
 
-Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. SMTP remains disabled until the owner selects a mailbox and adds an app password locally.
+Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. SMTP remains disabled until the owner explicitly runs the local Gmail setup with a dedicated app password. The first delivery must target an owner-controlled address; provider-policy confirmation and reply/bounce ingestion remain Stage 3 gates.
 
 The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local Stage 2 deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment.
 

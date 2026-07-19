@@ -21,12 +21,12 @@ test('business gate recomputes word count and validates claim IDs', () => {
   assert.throws(() => businessGate({ ...phrase, offer_claim_ids: ['unknown'] }, offer), { code: 'OFFER_CLAIM_UNKNOWN' });
 });
 
-test('template escapes HTML values and remains non-sendable', async () => {
+test('template escapes HTML values and is owner-approved for guarded sending', async () => {
   const root = new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1));
   const template = await loadTemplate(decodeURIComponent(root));
   const draft = renderDraft(template, { PERSONALIZATION_PHRASE: '<b>безопасная фраза</b>', COMPANY_NAME: 'A&B' });
   assert.match(draft.body_html, /&lt;b&gt;безопасная фраза&lt;\/b&gt;/u);
-  assert.equal(draft.sendable, false);
+  assert.equal(draft.sendable, true);
   assert.deepEqual(template.manifest.allowed_placeholders, ['COMPANY_NAME', 'PERSONALIZATION_PHRASE']);
   assert.match(draft.body_text, /Если такие обращения для вашей компании неактуальны/u);
 });

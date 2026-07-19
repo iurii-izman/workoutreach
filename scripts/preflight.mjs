@@ -19,7 +19,7 @@ if (!stage.stage2_mock_foundation?.mock_outbox_implemented
   || stage.stage2_mock_foundation.state_store !== 'postgresql'
   || stage.stage2_mock_foundation.public_webhook !== false
 ) errors.push('stage-2 mock boundary invalid');
-if (template.sendable || !template.owner_approved) errors.push('owner-approved template boundary invalid');
+if (!template.sendable || !template.owner_approved) errors.push('owner-approved template boundary invalid');
 if (offer.sendable || !offer.owner_approved || offer.claims.length === 0) errors.push('owner-approved offer boundary invalid');
 if (template.allowed_placeholders.length !== 2 || !template.allowed_placeholders.includes('COMPANY_NAME') || !template.allowed_placeholders.includes('PERSONALIZATION_PHRASE')) {
   errors.push('template placeholder boundary invalid');

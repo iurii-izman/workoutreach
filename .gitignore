@@ -8,6 +8,7 @@ coverage/
 dist/
 .n8n/
 .runtime/
+.playwright-cli/
 *.log
 *.tmp
 .DS_Store

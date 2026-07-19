@@ -46,12 +46,9 @@ export class PostgresBotStore {
   }
 
   async verifyReady() {
-    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
+    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '007_stage_3_template_sendability') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
     const row = result.rows[0];
     if (!row?.ready) throw new SafeStop('DATABASE_MIGRATION_MISSING', 'Local Stage-2 runtime and model-budget migrations are required');
-    if (row.live_send_enabled || row.mail_transport !== 'disabled' || Number(row.daily_send_limit) !== 0 || !row.kill_switch_enabled) {
-      throw new SafeStop('STAGE2_SAFETY_BLOCK', 'Database safety controls do not permit the local mock runtime');
-    }
     return true;
   }
 
@@ -214,9 +211,9 @@ export class PostgresBotStore {
         `INSERT INTO workoutreach.drafts(
            job_id,draft_version,recipient_email,recipient_hmac,subject,body_text,body_html,
            template_version,template_sha256,sendable,attachment_filename,attachment_mime_type,attachment_sha256,attachment_bytes
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10,$11,$12,$13)`,
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [result.job_id, version, selected.email, recipientHmac, result.draft.subject, result.draft.body_text, result.draft.body_html,
-          result.draft.template_version, result.draft.template_sha256, attachmentFilename, attachmentMime, attachmentSha, attachmentBytes],
+          result.draft.template_version, result.draft.template_sha256, result.draft.sendable === true, attachmentFilename, attachmentMime, attachmentSha, attachmentBytes],
       );
       await client.query("UPDATE workoutreach.jobs SET status='DRAFT_READY',error_code=NULL WHERE job_id=$1", [result.job_id]);
 
@@ -322,7 +319,7 @@ export class PostgresBotStore {
   async getAuthorizedJob(jobId, userId, chatId) {
     const result = await this.pool.query(
       `SELECT j.job_id,j.canonical_url,j.status,j.error_code,j.created_at,j.updated_at,j.expires_at,
-              d.draft_version,o.status AS outbox_status
+              d.draft_version,o.status AS outbox_status,o.transport AS outbox_transport
        FROM workoutreach.jobs j
        LEFT JOIN LATERAL (SELECT draft_version FROM workoutreach.drafts WHERE job_id=j.job_id ORDER BY draft_version DESC LIMIT 1) d ON true
        LEFT JOIN LATERAL (SELECT status FROM workoutreach.outbox WHERE job_id=j.job_id ORDER BY id DESC LIMIT 1) o ON true
@@ -338,15 +335,16 @@ export class PostgresBotStore {
     try {
       await client.query('BEGIN');
       const draft = await client.query(
-        `SELECT j.job_id,j.status,d.draft_version,d.recipient_email,d.subject
+        `SELECT j.job_id,j.status,d.draft_version,d.recipient_email,d.subject,d.sendable
          FROM workoutreach.jobs j JOIN LATERAL (
-           SELECT draft_version,recipient_email,subject FROM workoutreach.drafts WHERE job_id=j.job_id ORDER BY draft_version DESC LIMIT 1
+           SELECT draft_version,recipient_email,subject,sendable FROM workoutreach.drafts WHERE job_id=j.job_id ORDER BY draft_version DESC LIMIT 1
          ) d ON true
          WHERE j.job_id=$1 AND j.telegram_user_id=$2 AND j.telegram_chat_id=$3 FOR UPDATE OF j`,
         [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
       );
       const row = draft.rows[0];
       if (!row || row.status !== 'DRAFT_READY') throw new SafeStop('APPROVAL_STATE_INVALID', 'Only an owned ready draft can receive a new SMTP approval');
+      if (row.sendable !== true) throw new SafeStop('TEMPLATE_NOT_SENDABLE', 'A legacy non-sendable draft cannot be approved for SMTP');
       const token = await client.query('SELECT callback_data FROM workoutreach.issue_local_review_token($1,$2,$3,$4,$5)', [jobId, row.draft_version, 'smtp_send', asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')]);
       await client.query('COMMIT');
       return { ...row, callbackData: token.rows[0].callback_data };

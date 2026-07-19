@@ -1,6 +1,6 @@
 # Incident and kill switch
 
-Current kill switch is structural: `LIVE_SEND_ENABLED=false`, `MAIL_TRANSPORT=disabled`, no outbox, no mail adapter, disabled workflows and non-sendable templates.
+The default kill switch is structural: `LIVE_SEND_ENABLED=false`, `MAIL_TRANSPORT=disabled`, daily limit zero, database `kill_switch_enabled=true` and disabled workflows. The SMTP adapter and owner-approved template exist, but cannot create or claim an SMTP outbox while these runtime controls are disabled.
 
 If an unexpected external action or secret exposure is suspected:
 

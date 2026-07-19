@@ -54,6 +54,7 @@ function friendlyFailure(error) {
     MODEL_INCOMPLETE: 'Модель не завершила структурированный ответ. Попробуйте позже.',
     MODEL_REFUSAL: 'Модель отказалась обработать этот материал.',
     DAILY_ANALYSIS_LIMIT: 'Дневной лимит анализа исчерпан. Это защищает баланс OpenAI; повторите после 00:00 UTC или осознанно измените лимит.',
+    TEMPLATE_NOT_SENDABLE: 'Этот черновик создан до активации проверенного шаблона. Пришлите URL заново, чтобы создать новую безопасную версию.',
   };
   return `Задание безопасно остановлено.\nКод: ${result.code}\n${messages[result.code] ?? 'Проверьте URL или повторите попытку позже.'}`;
 }
@@ -139,8 +140,11 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       const jobId = text.match(/\b(WO-[A-Z0-9]{6})\b/u)?.[1];
       if (stateStore && jobId) {
         const job = await stateStore.getAuthorizedJob(jobId, String(message.from.id), chatId);
+        const delivery = job?.outbox_status
+          ? `${job.outbox_transport}:${job.outbox_status}`
+          : 'не создан';
         await client.sendText(chatId, job
-          ? `#${job.job_id}\nСтатус задания: ${job.status}\nВерсия черновика: ${job.draft_version ?? '—'}\nMock outbox: ${job.outbox_status ?? 'не создан'}\nEmail отправлен: нет.`
+          ? `#${job.job_id}\nСтатус задания: ${job.status}\nВерсия черновика: ${job.draft_version ?? '—'}\nOutbox: ${delivery}`
           : 'Задание не найдено или недоступно.');
       } else await client.sendText(chatId, copy.status);
       return { ok: true, action: 'status' };
