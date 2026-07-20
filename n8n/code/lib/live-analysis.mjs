@@ -10,10 +10,24 @@ function positiveNumber(value, fallback, name) {
   return parsed;
 }
 
-export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, modelAdapter = null } = {}) {
-  if (env.LIVE_SEND_ENABLED?.toLowerCase() === 'true' || (env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled') {
-    throw new SafeStop('LIVE_SEND_BLOCKED', 'Mail must remain disabled for live analysis');
+export function assertLiveAnalysisRuntime(env = process.env) {
+  const liveSendEnabled = String(env.LIVE_SEND_ENABLED ?? 'false').toLowerCase() === 'true';
+  const mailTransport = env.MAIL_TRANSPORT ?? 'disabled';
+  const dailySendLimit = Number(env.DAILY_SEND_LIMIT ?? 0);
+  const disabledRuntime = !liveSendEnabled && mailTransport === 'disabled' && dailySendLimit === 0;
+  const guardedSmtpRuntime = liveSendEnabled
+    && mailTransport === 'smtp'
+    && Number.isSafeInteger(dailySendLimit)
+    && dailySendLimit >= 1
+    && dailySendLimit <= 5;
+  if (!disabledRuntime && !guardedSmtpRuntime) {
+    throw new SafeStop('MAIL_CONFIG_INVALID', 'Live analysis requires either the disabled mail state or the guarded SMTP state');
   }
+  return Object.freeze({ liveSendEnabled, mailTransport, dailySendLimit });
+}
+
+export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, modelAdapter = null } = {}) {
+  assertLiveAnalysisRuntime(env);
   if ((env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
 
   const offerProfile = await loadOfferProfile(root);
