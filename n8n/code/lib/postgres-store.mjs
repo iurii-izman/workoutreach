@@ -322,7 +322,7 @@ export class PostgresBotStore {
               d.draft_version,o.status AS outbox_status,o.transport AS outbox_transport
        FROM workoutreach.jobs j
        LEFT JOIN LATERAL (SELECT draft_version FROM workoutreach.drafts WHERE job_id=j.job_id ORDER BY draft_version DESC LIMIT 1) d ON true
-       LEFT JOIN LATERAL (SELECT status FROM workoutreach.outbox WHERE job_id=j.job_id ORDER BY id DESC LIMIT 1) o ON true
+       LEFT JOIN LATERAL (SELECT status,transport FROM workoutreach.outbox WHERE job_id=j.job_id ORDER BY id DESC LIMIT 1) o ON true
        WHERE j.job_id=$1 AND j.telegram_user_id=$2 AND j.telegram_chat_id=$3`,
       [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
     );

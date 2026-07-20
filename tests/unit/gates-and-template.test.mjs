@@ -11,6 +11,47 @@ test('evidence requires literal source excerpt and literal fact', () => {
   assert.throws(() => evidenceGate({ ...fact, fact: 'Acme получила миллион клиентов.' }, pages, 'acme.example'), { code: 'EVIDENCE_FACT_NOT_LITERAL' });
 });
 
+test('evidence accepts an exact company name published in a loaded page title', () => {
+  const titleOnlyPages = [{
+    source_id: 'p01',
+    source_type: 'homepage_or_other',
+    source_url: 'https://mslab.kz/',
+    title: 'Лаборатория управленческих решений',
+    text: 'Мы повышаем управляемость и автоматизируем процессы компании.',
+  }];
+  const fact = {
+    company_name: 'Лаборатория управленческих решений',
+    fact: 'автоматизируем процессы компании',
+    source_id: 'p01',
+    source_excerpt: 'Мы повышаем управляемость и автоматизируем процессы компании.',
+    source_type: 'homepage_or_other',
+    published_at: null,
+    decision: 'READY_FOR_REVIEW',
+  };
+  assert.equal(evidenceGate(fact, titleOnlyPages, 'mslab.kz').accepted, true);
+});
+
+test('evidence accepts a literal Latin brand token present in the submitted domain', () => {
+  const fact = {
+    company_name: 'MSLAB — Лаборатория управленческих решений',
+    fact: 'автоматизируем процессы компании',
+    source_id: 'p01',
+    source_excerpt: 'Мы повышаем управляемость и автоматизируем процессы компании.',
+    source_type: 'homepage_or_other',
+    published_at: null,
+    decision: 'READY_FOR_REVIEW',
+  };
+  const titleOnlyPages = [{
+    source_id: 'p01',
+    source_type: 'homepage_or_other',
+    source_url: 'https://mslab.kz/',
+    title: 'Лаборатория управленческих решений',
+    text: 'Мы повышаем управляемость и автоматизируем процессы компании.',
+  }];
+  assert.equal(evidenceGate(fact, titleOnlyPages, 'mslab.kz').accepted, true);
+  assert.throws(() => evidenceGate(fact, titleOnlyPages, 'unrelated.example'), { code: 'EVIDENCE_COMPANY_UNCONFIRMED' });
+});
+
 test('business gate recomputes word count and validates claim IDs', () => {
   const offer = { owner_approved: false, synthetic_eval: true, claims: [{ id: 'claim-1', text: 'Synthetic' }] };
   const phrase = {

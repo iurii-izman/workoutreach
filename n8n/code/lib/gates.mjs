@@ -13,8 +13,11 @@ export function evidenceGate(fact, pages, hostname) {
   if (!excerpt.includes(normalizedFact)) throw new SafeStop('EVIDENCE_FACT_NOT_LITERAL', 'Fact is not literally grounded in the evidence excerpt');
 
   const company = normalizeComparable(fact.company_name);
-  const companyOnSite = pages.some((page) => normalizeComparable(page.text).includes(company));
-  const companyInDomain = hostname.toLowerCase().includes(company.replace(/[^\p{L}\p{N}]+/gu, ''));
+  const companyOnSite = pages.some((page) => normalizeComparable(`${page.title ?? ''} ${page.text}`).includes(company));
+  const domainBrand = String(hostname).toLowerCase().split('.').filter((label) => label !== 'www').join('');
+  const companyInDomain = company
+    .match(/[\p{L}\p{M}\p{N}]+/gu)
+    ?.some((token) => token.length >= 4 && /^[a-z0-9]+$/u.test(token) && domainBrand.includes(token)) ?? false;
   if (!companyOnSite && !companyInDomain) throw new SafeStop('EVIDENCE_COMPANY_UNCONFIRMED', 'Company name is not confirmed by the loaded site or domain');
   if (fact.published_at !== null && !excerpt.includes(normalizeComparable(fact.published_at))) {
     throw new SafeStop('EVIDENCE_DATE_UNCONFIRMED', 'Publication date is not present in the evidence excerpt');
