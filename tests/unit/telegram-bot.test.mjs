@@ -151,6 +151,42 @@ test('local stage-2 state store reserves budget, persists preview and creates on
   assert.match(client.events.find((event) => event.id === 'callback-stage2').options.text, /Email не отправлен/u);
 });
 
+test('SMTP-enabled preview removes the obsolete dry-run label', async () => {
+  const client = createFakeClient();
+  const nonce = 'abcdefghijklmnopqrstuv';
+  const stateStore = {
+    mailEnabled: true,
+    async beginJob() { return { created: true, replay: false }; },
+    async reserveAnalysis() {},
+    async persistAnalysis(result) {
+      return {
+        mailEnabled: true,
+        callbacks: {
+          send: `smtp_send:${result.job_id}:${nonce}`,
+          regenerate: `regenerate:${result.job_id}:${nonce}`,
+          reject: `reject:${result.job_id}:${nonce}`,
+        },
+      };
+    },
+    async failJob() { assert.fail('successful analysis must not fail'); },
+  };
+  const handler = createTelegramBotHandler({
+    client,
+    allowlist,
+    stateStore,
+    analyze: async ({ jobId, beforeModelCalls }) => {
+      await beforeModelCalls();
+      return { job_id: jobId, telegram_preview: { text: `#${jobId} · ГОТОВО К ПРОВЕРКЕ (DRY-RUN)`, reply_markup: {} } };
+    },
+  });
+
+  await handler.handleUpdate(messageUpdate(23, 'https://example.com/'));
+  const preview = client.events.find((event) => event.type === 'preview').preview;
+  assert.match(preview.text, /ГОТОВО К ПРОВЕРКЕ$/u);
+  assert.doesNotMatch(preview.text, /DRY-RUN/u);
+  assert.equal(preview.reply_markup.inline_keyboard[0][0].text, 'Отправить email');
+});
+
 test('crawl failure before the model boundary does not reserve OpenAI budget', async () => {
   const client = createFakeClient();
   let reserved = false;

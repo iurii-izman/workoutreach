@@ -37,7 +37,17 @@ function modelSettings(settings = {}) {
     model: settings.model ?? 'gpt-5.6',
     effort: settings.effort ?? 'low',
     maxOutputTokens: settings.maxOutputTokens ?? 2200,
+    promptCacheMode: settings.promptCacheMode ?? null,
   };
+}
+
+function promptCacheOptions(mode) {
+  if (mode == null || mode === 'auto') return {};
+  if (mode !== 'explicit') throw new SafeStop('MODEL_CONFIG_INVALID', 'Prompt cache mode must be auto or explicit');
+  // Company source payloads are normally unique. Explicit mode without a
+  // breakpoint prevents an implicit one-off GPT-5.6 cache write while keeping
+  // the option to add a stable breakpoint after measured reuse is available.
+  return { prompt_cache_options: { mode: 'explicit' } };
 }
 
 function openAITransportSchema(schema) {
@@ -68,8 +78,9 @@ export async function buildFactRequest(root, pages, settings = {}) {
     max_output_tokens: configured.maxOutputTokens,
     truncation: 'disabled',
     tools: [],
+    ...promptCacheOptions(configured.promptCacheMode),
     instructions: prompt,
-    input: [{ role: 'user', content: JSON.stringify({ sources: pages.map(({ source_id, source_type, text }) => ({ source_id, source_type, text })) }) }],
+    input: [{ role: 'user', content: JSON.stringify({ sources: pages.map(({ source_id, source_type, title, text }) => ({ source_id, source_type, title, text })) }) }],
     text: { format: { type: 'json_schema', name: 'workoutreach_fact_v1', strict: true, schema: openAITransportSchema(schema) } },
     metadata: { prompt_version: 'fact-extraction.v1', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
   };
@@ -86,6 +97,7 @@ export async function buildPhraseRequest(root, fact, offerProfile, settings = {}
     max_output_tokens: configured.maxOutputTokens,
     truncation: 'disabled',
     tools: [],
+    ...promptCacheOptions(configured.promptCacheMode),
     instructions: prompt,
     input: [{
       role: 'user',

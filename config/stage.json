@@ -20,12 +20,12 @@
     "operator_adapter": "allowlisted_local_long_polling",
     "state_store": "postgresql",
     "public_webhook": false,
-    "daily_analysis_limit_default": 2
+    "daily_analysis_limit_default": 40
   },
   "stage3_smtp_foundation": {
     "adapter_implemented": true,
-    "activated": false,
-    "default_daily_send_limit": 1,
+    "activated": true,
+    "default_daily_send_limit": 30,
     "automatic_retry": false,
     "attachment_revalidated_before_send": true
   }

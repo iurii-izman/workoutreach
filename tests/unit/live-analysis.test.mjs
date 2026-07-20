@@ -10,8 +10,8 @@ test('live analysis accepts the physical mail-disabled runtime', () => {
 
 test('live analysis accepts guarded SMTP without granting transmission authority', () => {
   assert.deepEqual(assertLiveAnalysisRuntime({
-    MAIL_TRANSPORT: 'smtp', LIVE_SEND_ENABLED: 'true', DAILY_SEND_LIMIT: '1',
-  }), { liveSendEnabled: true, mailTransport: 'smtp', dailySendLimit: 1 });
+    MAIL_TRANSPORT: 'smtp', LIVE_SEND_ENABLED: 'true', DAILY_SEND_LIMIT: '30',
+  }), { liveSendEnabled: true, mailTransport: 'smtp', dailySendLimit: 30 });
 });
 
 test('live analysis rejects inconsistent or excessive mail configuration', () => {
@@ -19,6 +19,6 @@ test('live analysis rejects inconsistent or excessive mail configuration', () =>
     MAIL_TRANSPORT: 'smtp', LIVE_SEND_ENABLED: 'false', DAILY_SEND_LIMIT: '0',
   }), { code: 'MAIL_CONFIG_INVALID' });
   assert.throws(() => assertLiveAnalysisRuntime({
-    MAIL_TRANSPORT: 'smtp', LIVE_SEND_ENABLED: 'true', DAILY_SEND_LIMIT: '20',
+    MAIL_TRANSPORT: 'smtp', LIVE_SEND_ENABLED: 'true', DAILY_SEND_LIMIT: '31',
   }), { code: 'MAIL_CONFIG_INVALID' });
 });

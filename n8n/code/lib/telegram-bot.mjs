@@ -53,7 +53,7 @@ function friendlyFailure(error) {
     ROBOTS_UNAVAILABLE: 'Не удалось безопасно проверить robots.txt.',
     MODEL_INCOMPLETE: 'Модель не завершила структурированный ответ. Попробуйте позже.',
     MODEL_REFUSAL: 'Модель отказалась обработать этот материал.',
-    DAILY_ANALYSIS_LIMIT: 'Дневной лимит анализа исчерпан. Это защищает баланс OpenAI; повторите после 00:00 UTC или осознанно измените лимит.',
+    DAILY_ANALYSIS_LIMIT: 'Достигнута настроенная дневная ёмкость анализа. Незавершённые попытки тоже учитываются; новые задания станут доступны после 00:00 UTC.',
     TEMPLATE_NOT_SENDABLE: 'Этот черновик создан до активации проверенного шаблона. Пришлите URL заново, чтобы создать новую безопасную версию.',
   };
   return `Задание безопасно остановлено.\nКод: ${result.code}\n${messages[result.code] ?? 'Проверьте URL или повторите попытку позже.'}`;
@@ -73,6 +73,9 @@ async function withTyping(client, chatId, task) {
 function stage2Preview(preview, callbacks, mailEnabled = false) {
   return {
     ...preview,
+    text: mailEnabled
+      ? preview.text.replace('ГОТОВО К ПРОВЕРКЕ (DRY-RUN)', 'ГОТОВО К ПРОВЕРКЕ')
+      : preview.text,
     reply_markup: {
       inline_keyboard: [
         [{ text: mailEnabled ? 'Отправить email' : 'Отправить (mock)', callback_data: callbacks.send }],

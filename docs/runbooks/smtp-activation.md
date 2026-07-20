@@ -43,7 +43,7 @@ Then explicitly send one diagnostic message only to the configured sender addres
 npm run gmail:self-test
 ```
 
-The command refuses any recipient other than the configured Gmail sender, authenticates SMTP, makes no OpenAI call, revalidates the CV and writes redacted acceptance evidence to ignored `artifacts/evidence/gmail-self-test.json`. Only after provider acceptance does it set the daily campaign limit to one and restart the runtime. PostgreSQL then reports `mail.enabled=true`, `transport=smtp`, `daily_limit=1`, `kill_switch=false`; new Telegram previews show `Отправить email`.
+The command refuses any recipient other than the configured Gmail sender, authenticates SMTP, makes no OpenAI call, revalidates the CV and writes redacted acceptance evidence to ignored `artifacts/evidence/gmail-self-test.json`. Only after provider acceptance does it set the owner-approved daily campaign ceiling to 30 and restart the runtime. PostgreSQL then reports `mail.enabled=true`, `transport=smtp`, `daily_limit=30`, `kill_switch=false`; new Telegram previews show `Отправить email`. This remains a hard safety ceiling: every message still requires individual Telegram approval.
 
 Inspect the received sender, subject, plain-text/HTML rendering and PDF attachment before using the Telegram send action. Running `npm run gmail:self-test` again while live delivery is enabled is refused; disable Gmail first if a deliberate repeat is needed.
 

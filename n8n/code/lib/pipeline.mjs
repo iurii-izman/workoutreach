@@ -50,7 +50,7 @@ export async function loadOfferProfile(root, relative = 'product/offer-profile.v
   return JSON.parse(await readFile(join(root, relative), 'utf8'));
 }
 
-export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, beforeModelCalls = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
+export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, factModelSettings = modelSettings, phraseModelSettings = modelSettings, crawlLimits = {}, onModelEnvelope = null, beforeModelCalls = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
   if (!offerProfile || (!offerProfile.owner_approved && !offerProfile.synthetic_eval)) {
     throw new SafeStop('OFFER_NOT_APPROVED', 'An owner-approved or synthetic-eval offer profile is required');
   }
@@ -66,7 +66,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
   const pages = crawl.pages.map(({ _html, ...page }) => page);
   const hostname = new URL(crawl.root).hostname;
   const contracts = await loadModelContracts(root);
-  const factRequest = await buildFactRequest(root, pages, modelSettings);
+  const factRequest = await buildFactRequest(root, pages, factModelSettings);
   if (beforeModelCalls) await beforeModelCalls();
   const factEnvelope = await modelAdapter.fact(factRequest);
   if (onModelEnvelope) await onModelEnvelope({ phase: 'fact', envelope: factEnvelope });
@@ -74,7 +74,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
   const evidence = evidenceGate(fact, pages, hostname);
   const compactExcerpt = compactEvidenceExcerpt(evidence.source.text, fact.fact);
 
-  const phraseRequest = await buildPhraseRequest(root, fact, offerProfile, modelSettings);
+  const phraseRequest = await buildPhraseRequest(root, fact, offerProfile, phraseModelSettings);
   const phraseEnvelope = await modelAdapter.phrase(phraseRequest);
   if (onModelEnvelope) await onModelEnvelope({ phase: 'phrase', envelope: phraseEnvelope });
   const phrase = assertSchema(contracts.validatePhrase, assertCompletedModelEnvelope(phraseEnvelope), 'PHRASE_SCHEMA_INVALID');

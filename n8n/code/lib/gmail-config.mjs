@@ -39,7 +39,7 @@ export function configureGmailEnv(text) {
     SMTP_PORT: '465',
     SMTP_USER: sender,
     MAIL_FROM_ADDRESS: sender,
-    DAILY_SEND_LIMIT: '1',
+    DAILY_SEND_LIMIT: '30',
   })) result = upsertEnvValue(result, name, value);
   return result;
 }

@@ -35,13 +35,23 @@ function collectResponse(response) {
 }
 
 function safeMetadata(response) {
+  const inputDetails = response.usage?.input_tokens_details;
+  const outputDetails = response.usage?.output_tokens_details;
   return {
     response_id: typeof response.id === 'string' ? response.id : null,
     model: typeof response.model === 'string' ? response.model : null,
+    service_tier: typeof response.service_tier === 'string' ? response.service_tier : null,
     usage: response.usage ? {
       input_tokens: response.usage.input_tokens ?? null,
       output_tokens: response.usage.output_tokens ?? null,
       total_tokens: response.usage.total_tokens ?? null,
+      input_tokens_details: inputDetails ? {
+        cached_tokens: inputDetails.cached_tokens ?? null,
+        cache_write_tokens: inputDetails.cache_write_tokens ?? null,
+      } : null,
+      output_tokens_details: outputDetails ? {
+        reasoning_tokens: outputDetails.reasoning_tokens ?? null,
+      } : null,
     } : null,
   };
 }

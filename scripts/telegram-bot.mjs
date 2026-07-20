@@ -123,7 +123,7 @@ async function main() {
     await stateStore.syncAllowlist(allowlist);
     const dailySendLimit = Number(process.env.DAILY_SEND_LIMIT ?? 0);
     if (liveSendEnabled) {
-      if (!Number.isSafeInteger(dailySendLimit) || dailySendLimit < 1 || dailySendLimit > 5) throw new SafeStop('DAILY_SEND_LIMIT_INVALID', 'Live SMTP requires a daily send limit from 1 to 5');
+      if (!Number.isSafeInteger(dailySendLimit) || dailySendLimit < 1 || dailySendLimit > 30) throw new SafeStop('DAILY_SEND_LIMIT_INVALID', 'Live SMTP requires a daily send limit from 1 to 30');
       smtpMailer = createSmtpMailerFromEnv(process.env);
       await smtpMailer.verify();
       await stateStore.syncMailRuntime({ enabled: true, dailyLimit: dailySendLimit });
@@ -137,7 +137,7 @@ async function main() {
   const dailyAnalysisLimit = Number(process.env.DAILY_ANALYSIS_LIMIT ?? 2);
   const pollTimeoutSeconds = Number(process.env.TELEGRAM_POLL_TIMEOUT_SECONDS ?? 25);
   if (!Number.isSafeInteger(maxRegenerations) || maxRegenerations < 0 || maxRegenerations > 5) throw new SafeStop('BOT_CONFIG_INVALID', 'MAX_REGENERATIONS must be an integer from 0 to 5');
-  if (!Number.isSafeInteger(dailyAnalysisLimit) || dailyAnalysisLimit < 1 || dailyAnalysisLimit > 20) throw new SafeStop('BOT_CONFIG_INVALID', 'DAILY_ANALYSIS_LIMIT must be an integer from 1 to 20');
+  if (!Number.isSafeInteger(dailyAnalysisLimit) || dailyAnalysisLimit < 1 || dailyAnalysisLimit > 40) throw new SafeStop('BOT_CONFIG_INVALID', 'DAILY_ANALYSIS_LIMIT must be an integer from 1 to 40');
   if (!Number.isSafeInteger(pollTimeoutSeconds) || pollTimeoutSeconds < 1 || pollTimeoutSeconds > 50) throw new SafeStop('BOT_CONFIG_INVALID', 'TELEGRAM_POLL_TIMEOUT_SECONDS must be an integer from 1 to 50');
   const handler = createTelegramBotHandler({
     client,
