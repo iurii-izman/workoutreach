@@ -18,6 +18,8 @@ The public Bitrix24 Kazakhstan partner catalog is an authorized seed source. `np
 
 The local operator dashboard, migration 008, synthetic dashboard smoke fixtures, ADR-0009 and its runbook were newly authored on 2026-07-20 from the owner's direct dashboard requirements, the project contract and existing project-owned schema. No donor repository or external application source was consulted.
 
+Pilot contact resolution, migration 011, Telegram operator commands, ADR-0012 and the pilot runbook were newly authored on 2026-07-20 from the owner's direct requirements and the existing Workoutreach contracts. No donor repository or external application source was consulted.
+
 ## First-commit evidence
 
 The repository root commit is `70b54615815fe254f61a19f5c44c4c7732222bb6` and contains only `TECHNICAL_SPEC.md`.

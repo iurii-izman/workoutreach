@@ -1,6 +1,6 @@
 # Guarded Gmail SMTP activation
 
-SMTP delivery is implemented but disabled. The selected sender is configured only in ignored `.env`. Use a dedicated Google app password; never enter the normal Gmail password into this project or send either password through chat.
+SMTP delivery is implemented and disabled by repository default. An owner runtime can activate it only through this runbook. The selected sender is configured only in ignored `.env`. Use a dedicated Google app password; never enter the normal Gmail password into this project or send either password through chat.
 
 Google app passwords require 2-Step Verification and may be unavailable for accounts using Advanced Protection, security-key-only 2-Step Verification, or some managed-organization policies. Google revokes app passwords after the main account password changes. See [Google Account Help](https://support.google.com/accounts/answer/185833?hl=en-GB).
 

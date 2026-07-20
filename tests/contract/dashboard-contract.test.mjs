@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const migration = await readFile(new URL('../../migrations/008_local_operator_dashboard.sql', import.meta.url), 'utf8');
 const compose = await readFile(new URL('../../compose.yaml', import.meta.url), 'utf8');
 const client = await readFile(new URL('../../dashboard/public/app.js', import.meta.url), 'utf8');
+const localStatus = await readFile(new URL('../../scripts/local-stage2-status.mjs', import.meta.url), 'utf8');
 
 test('dashboard migration keeps delivery and engagement state separate', () => {
   assert.match(migration, /transport = 'smtp' AND o\.status = 'SMTP_ACCEPTED'/u);
@@ -29,4 +30,13 @@ test('dashboard container is internal, read-only and has no send credentials', (
 test('database values are never rendered through innerHTML', () => {
   assert.doesNotMatch(client, /innerHTML|insertAdjacentHTML|outerHTML/u);
   assert.match(client, /textContent/u);
+});
+
+test('local status requires every runtime service and pilot migration', () => {
+  for (const service of ['workoutreach-postgres', 'workoutreach-n8n', 'workoutreach-proxy', 'workoutreach-dashboard', 'workoutreach-bot']) {
+    assert.match(localStatus, new RegExp(`containers\\['${service}'\\]\\.health === 'healthy'`, 'u'));
+  }
+  for (const version of ['004', '005', '006', '007', '008', '009', '010', '011']) {
+    assert.match(localStatus, new RegExp(`database\\.migration_${version} === true`, 'u'));
+  }
 });

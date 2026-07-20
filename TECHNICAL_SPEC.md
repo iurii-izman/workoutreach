@@ -262,8 +262,8 @@ flowchart LR
 - claim одной `pending` outbox-записи через блокировку;
 - повторная проверка suppression непосредственно перед отправкой;
 - только mock-dispatch; реальный Gmail SMTP dispatcher находится в Node.js service;
-- сохранение provider message ID и результата;
-- запрет слепого повтора при неоднозначном timeout.
+- сохранение точного mock-результата без provider message ID;
+- невозможность внешней передачи письма.
 
 ### `06_mail_events` — не реализован
 

@@ -54,7 +54,7 @@ npm run live:preview -- https://company.example/
 
 Only after checking the allowlist, add `--telegram` to transmit the review preview. The button remains a physical mock block, and no mail transport or outbox is present.
 
-## Local Stage 2 Telegram bot
+## Local Telegram runtime (Stages 2–3)
 
 The preferred local runtime needs neither a public server nor a domain. It starts PostgreSQL, n8n, the loopback-only HTTPS proxy and one allowlisted Telegram long-polling bot:
 
@@ -73,6 +73,8 @@ Operational commands:
 - `/status [WO-XXXXXX]`, `/approve WO-XXXXXX`, `/email WO-XXXXXX address`, `/help`, `/version`.
 
 Use `npm run local:stop` to stop containers without deleting their named volumes. Docker Desktop must be running; enable its own “Start Docker Desktop when you sign in” option if the bot should recover automatically after Windows login. Container restart policy is `unless-stopped`. See [the local Stage-2 runbook](docs/runbooks/local-stage2.md).
+
+Before real company work, follow [the pilot operations runbook](docs/runbooks/pilot-operations.md). Treat 50 as a reviewed quality dataset, not a one-day send batch; actual delivery ramps from 5 to 10 to 20 only after manual reply/failure checks.
 
 The owner-approved local capacity is `DAILY_ANALYSIS_LIMIT=40`, with two independent OpenAI calls reserved per analysis. The SMTP ceiling is 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
@@ -130,7 +132,7 @@ npm run smoke:clean-clone
 - `docs/adr/` and `docs/runbooks/` — decisions and operating procedures.
 - `dashboard/` — local authenticated read-mostly company UI and constrained API;
 
-## Implemented Stage 2 safety boundary
+## Implemented safety boundary
 
 - PostgreSQL migration `003_stage_2_mock_outbox` with one-time hashed approval tokens and 24-hour TTL;
 - recipient suppression by keyed-HMAC fingerprint (the key is never stored in the database);
@@ -144,10 +146,12 @@ npm run smoke:clean-clone
 - database-atomic daily model-analysis reservation before any OpenAI request.
 - durable pre-model contact review with published-source selection and explicit manual provenance;
 - PostgreSQL-backed `/next`, `/queue` and `/usage` operator commands.
+- guarded Gmail SMTP transport with a database-enforced 30/day ceiling, CV revalidation, explicit one-time approval and no automatic retry after ambiguous outcomes;
+- migration `011_pilot_contact_resolution` with published/manual provenance and hashed pre-draft contact-review tokens.
 
 ## Intentionally blocked
 
-Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. SMTP remains disabled until the owner explicitly runs the local Gmail setup with a dedicated app password. The first delivery must target an owner-controlled address; provider-policy confirmation and reply/bounce ingestion remain Stage 3 gates.
+Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. Repository/CI SMTP defaults remain disabled; owner activation requires the Gmail setup and owner-only self-test. Provider-policy confirmation and reply/bounce/complaint ingestion remain pilot scaling gates.
 
 The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local runtime deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment. Reply/bounce/complaint ingestion remains a pilot gate, so volume should ramp gradually even though the hard SMTP ceiling is 30/day.
 

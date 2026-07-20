@@ -1,5 +1,5 @@
 {
-  "implemented_stages": [0, 1, 2],
+  "implemented_stages": [0, 1, 2, 3],
   "openai_transport": "stub",
   "telegram_transport": "stub",
   "guarded_live_eval": {
@@ -8,9 +8,11 @@
     "telegram_update_mode": "allowlisted_local_long_polling",
     "explicit_command_required": true
   },
-  "mail_transport": "disabled",
-  "live_send_enabled": false,
-  "live_outbox_implemented": false,
+  "repository_default": {
+    "mail_transport": "disabled",
+    "live_send_enabled": false,
+    "live_outbox_enabled": false
+  },
   "stage2_mock_foundation": {
     "database_core": "implemented_and_smoke_verified",
     "n8n_exports": "inactive_credential_free_contracts",
@@ -24,7 +26,9 @@
   },
   "stage3_smtp_foundation": {
     "adapter_implemented": true,
-    "activated": true,
+    "smtp_outbox_implemented": true,
+    "owner_activation_supported": true,
+    "repository_default_active": false,
     "default_daily_send_limit": 30,
     "automatic_retry": false,
     "attachment_revalidated_before_send": true

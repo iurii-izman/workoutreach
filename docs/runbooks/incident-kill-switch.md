@@ -4,11 +4,11 @@ The default kill switch is structural: `LIVE_SEND_ENABLED=false`, `MAIL_TRANSPOR
 
 If an unexpected external action or secret exposure is suspected:
 
-1. stop the n8n container;
-2. revoke affected provider credentials from their provider consoles;
-3. preserve only redacted logs correlated by job/execution ID;
-4. rotate the affected secret class;
-5. run greenfield and secret scans;
+1. run `npm run gmail:disable`; this disables the database SMTP switch and restarts the bot in mail-disabled mode;
+2. if the command cannot complete, run `docker compose stop workoutreach-bot` immediately;
+3. revoke the Gmail app password or other affected provider credential in its provider console;
+4. preserve only redacted logs correlated by `job_id`; n8n is not the current send path;
+5. rotate the affected secret class and run greenfield/secret scans plus the non-sending verification suite;
 6. document scope, timeline, affected records and recovery evidence before restart.
 
 Never paste raw payloads, HTML, tokens, email content or stack traces into Telegram.

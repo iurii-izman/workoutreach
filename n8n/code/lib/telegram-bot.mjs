@@ -232,7 +232,8 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       try {
         const selected = await stateStore.selectManualContact({ jobId: match[1].toUpperCase(), email: match[2], userId: String(message.from.id), chatId, updateId: update.update_id });
         if (selected.replay) { await client.sendText(chatId, 'Эта команда уже обработана.'); return { ok: true, action: selected.result_code, idempotentReplay: true }; }
-        await client.sendText(chatId, `#${selected.job_id}\nАдрес принят и явно помечен: ${selected.provenance}. Продолжаю анализ без передачи email модели.`);
+        const provenanceText = selected.provenance === 'manual' ? 'manual' : 'published (адрес уже был найден на сайте)';
+        await client.sendText(chatId, `#${selected.job_id}\nАдрес принят. Источник: ${provenanceText}. Продолжаю анализ без передачи email модели.`);
         return executeAnalysis({
           inputUrl: selected.canonical_url, chatId, userId: String(message.from.id), updateId: update.update_id,
           seed: `telegram-update-${update.update_id}-manual-contact`, jobId: selected.job_id, begin: false,
@@ -385,8 +386,26 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       if (update.callback_query?.id) await client.answerCallbackQuery(update.callback_query.id, { text: 'Доступ запрещён.', showAlert: true }).catch(() => {});
       return { ok: true, ignored: true, reason: 'unauthorized' };
     }
-    if (update.message) return handleMessage(update);
-    if (update.callback_query) return handleCallback(update);
+    if (update.message) {
+      try {
+        return await handleMessage(update);
+      } catch (error) {
+        const safe = asSafeResult(error);
+        await client.sendText(String(update.message.chat.id), friendlyFailure(error)).catch(() => {});
+        return { ok: false, action: 'message_failed', ...safe };
+      }
+    }
+    if (update.callback_query) {
+      try {
+        return await handleCallback(update);
+      } catch (error) {
+        const safe = asSafeResult(error);
+        await client.answerCallbackQuery(update.callback_query.id, { text: `Действие безопасно остановлено: ${safe.code}.`, showAlert: true }).catch(() => {});
+        const chatId = update.callback_query.message?.chat?.id;
+        if (chatId != null) await client.sendText(String(chatId), friendlyFailure(error)).catch(() => {});
+        return { ok: false, action: 'callback_failed', ...safe };
+      }
+    }
     return { ok: true, ignored: true, reason: 'unsupported_update' };
   }
 

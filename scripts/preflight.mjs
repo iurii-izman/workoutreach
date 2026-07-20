@@ -10,7 +10,10 @@ const offer = JSON.parse(await readFile(join(root, 'product/offer-profile.v1.yam
 const envExample = await readFile(join(root, '.env.example'), 'utf8');
 const errors = [];
 
-if (stage.live_send_enabled || stage.mail_transport !== 'disabled' || stage.live_outbox_implemented) errors.push('stage boundary permits sending');
+if (stage.repository_default?.live_send_enabled
+  || stage.repository_default?.mail_transport !== 'disabled'
+  || stage.repository_default?.live_outbox_enabled
+) errors.push('repository default permits sending');
 if (!stage.stage2_mock_foundation?.mock_outbox_implemented
   || stage.stage2_mock_foundation.database_core !== 'implemented_and_smoke_verified'
   || stage.stage2_mock_foundation.mail_transmission_possible !== false
@@ -19,6 +22,12 @@ if (!stage.stage2_mock_foundation?.mock_outbox_implemented
   || stage.stage2_mock_foundation.state_store !== 'postgresql'
   || stage.stage2_mock_foundation.public_webhook !== false
 ) errors.push('stage-2 mock boundary invalid');
+if (!stage.implemented_stages?.includes(3)
+  || stage.stage3_smtp_foundation?.adapter_implemented !== true
+  || stage.stage3_smtp_foundation?.smtp_outbox_implemented !== true
+  || stage.stage3_smtp_foundation?.owner_activation_supported !== true
+  || stage.stage3_smtp_foundation?.repository_default_active !== false
+) errors.push('stage-3 capability manifest invalid');
 if (!template.sendable || !template.owner_approved) errors.push('owner-approved template boundary invalid');
 if (offer.sendable || !offer.owner_approved || offer.claims.length === 0) errors.push('owner-approved offer boundary invalid');
 if (template.allowed_placeholders.length !== 2 || !template.allowed_placeholders.includes('COMPANY_NAME') || !template.allowed_placeholders.includes('PERSONALIZATION_PHRASE')) {

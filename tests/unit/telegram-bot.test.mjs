@@ -294,7 +294,7 @@ test('manual email command explicitly selects manual provenance and continues th
   const result = await handler.handleUpdate(messageUpdate(41, '/email WO-ABC234 known@example.com'));
   assert.equal(result.status, 'DRAFT_READY');
   assert.deepEqual(receivedSelection, { type: 'manual', email: 'known@example.com' });
-  assert.match(client.events[0].text, /помечен: manual/u);
+  assert.match(client.events[0].text, /Источник: manual/u);
 });
 
 test('/queue, /next and /usage read operational state without analysis', async () => {
@@ -309,4 +309,24 @@ test('/queue, /next and /usage read operational state without analysis', async (
   assert.equal((await handler.handleUpdate(messageUpdate(43, '/next'))).jobId, 'WO-ABC234');
   assert.equal((await handler.handleUpdate(messageUpdate(44, '/usage'))).action, 'usage');
   assert.ok(client.events.some((event) => /SMTP: 1 принято/u.test(event.text)));
+});
+
+test('database callback failures always answer Telegram with a safe code', async () => {
+  const client = createFakeClient();
+  const stateStore = {
+    async selectPublishedContact() { throw new SafeStop('DATABASE_TEMPORARY', 'raw database detail must not be shown'); },
+  };
+  const handler = createTelegramBotHandler({ client, allowlist, stateStore, analyze: async () => assert.fail('analysis must not run') });
+  const result = await handler.handleUpdate({
+    update_id: 45,
+    callback_query: {
+      id: 'callback-db-error', from: { id: 101 }, data: 'contact:WO-ABC234:7:abcdefghijklmnopqrstuv',
+      message: { message_id: 18, chat: { id: 202, type: 'private' } },
+    },
+  });
+  assert.equal(result.action, 'callback_failed');
+  const callback = client.events.find((event) => event.type === 'callback');
+  assert.equal(callback.options.showAlert, true);
+  assert.match(callback.options.text, /DATABASE_TEMPORARY/u);
+  assert.doesNotMatch(callback.options.text, /raw database detail/u);
 });
