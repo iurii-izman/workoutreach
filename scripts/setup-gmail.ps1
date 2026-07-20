@@ -1,7 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$root = Split-Path -Parent $PSScriptRoot
-$secure = Read-Host 'Введите 16-значный Google App Password (ввод скрыт)' -AsSecureString
+$secure = Read-Host 'Enter the 16-character Google App Password (input is hidden)' -AsSecureString
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
   $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
