@@ -95,6 +95,7 @@ export async function crawlSite(input, fetcher, limits = {}) {
   const queue = [root];
   const seen = new Set();
   const pages = [];
+  const skippedPages = [];
   let totalChars = 0;
 
   while (queue.length && pages.length < options.maxPages) {
@@ -103,7 +104,18 @@ export async function crawlSite(input, fetcher, limits = {}) {
     if (seen.has(current.href)) continue;
     if (!robots.allows(current)) continue;
     seen.add(current.href);
-    const response = await fetcher(current.href);
+    let response;
+    try {
+      response = await fetcher(current.href);
+    } catch (error) {
+      const optionalGone = current.href !== root.href
+        && error instanceof SafeStop
+        && error.code === 'FETCH_HTTP_STATUS'
+        && [404, 410].includes(Number(error.details?.status));
+      if (!optionalGone) throw error;
+      skippedPages.push({ url: current.href, code: error.code, status: Number(error.details.status) });
+      continue;
+    }
     if (Date.now() - started > options.jobTimeoutMs) throw new SafeStop('CRAWL_TIMEOUT', 'Job crawl budget exceeded');
     const parsed = htmlToPage(response.body, response.url, options.maxTextChars - totalChars);
     if (!parsed.text) continue;
@@ -123,5 +135,5 @@ export async function crawlSite(input, fetcher, limits = {}) {
     }
   }
   if (pages.length === 0) throw new SafeStop('CRAWL_EMPTY', 'No usable HTML text was loaded');
-  return { root: root.href, pages, totalChars, elapsedMs: Date.now() - started };
+  return { root: root.href, pages, skippedPages, totalChars, elapsedMs: Date.now() - started };
 }

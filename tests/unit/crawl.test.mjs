@@ -30,3 +30,24 @@ test('crawler fetches no more than six HTML pages and never fetches disallowed l
 test('crawler stops when robots cannot be evaluated safely', async () => {
   await assert.rejects(crawlSite('https://example.com/', async () => { throw new SafeStop('FETCH_TIMEOUT', 'timeout'); }), { code: 'ROBOTS_UNAVAILABLE' });
 });
+
+test('crawler skips optional pages that became 404 or 410 and records evidence', async () => {
+  const fetcher = async (url) => {
+    const path = new URL(url).pathname;
+    if (path === '/robots.txt') return { url, body: 'User-agent: *\n' };
+    if (path === '/') return { url, body: '<body>home<a href="/missing">missing</a><a href="/about">about</a></body>' };
+    if (path === '/missing') throw new SafeStop('FETCH_HTTP_STATUS', 'not found', { status: 404 });
+    return { url, body: '<body>usable about page</body>' };
+  };
+  const result = await crawlSite('https://example.com/', fetcher, { maxPages: 6 });
+  assert.equal(result.pages.length, 2);
+  assert.deepEqual(result.skippedPages, [{ url: 'https://example.com/missing', code: 'FETCH_HTTP_STATUS', status: 404 }]);
+});
+
+test('crawler still fails when the submitted root page is missing', async () => {
+  const fetcher = async (url) => {
+    if (new URL(url).pathname === '/robots.txt') return { url, body: 'User-agent: *\n' };
+    throw new SafeStop('FETCH_HTTP_STATUS', 'not found', { status: 404 });
+  };
+  await assert.rejects(crawlSite('https://example.com/', fetcher), { code: 'FETCH_HTTP_STATUS' });
+});

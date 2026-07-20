@@ -50,7 +50,7 @@ export async function loadOfferProfile(root, relative = 'product/offer-profile.v
   return JSON.parse(await readFile(join(root, relative), 'utf8'));
 }
 
-export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
+export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, crawlLimits = {}, onModelEnvelope = null, beforeModelCalls = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
   if (!offerProfile || (!offerProfile.owner_approved && !offerProfile.synthetic_eval)) {
     throw new SafeStop('OFFER_NOT_APPROVED', 'An owner-approved or synthetic-eval offer profile is required');
   }
@@ -67,6 +67,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
   const hostname = new URL(crawl.root).hostname;
   const contracts = await loadModelContracts(root);
   const factRequest = await buildFactRequest(root, pages, modelSettings);
+  if (beforeModelCalls) await beforeModelCalls();
   const factEnvelope = await modelAdapter.fact(factRequest);
   if (onModelEnvelope) await onModelEnvelope({ phase: 'fact', envelope: factEnvelope });
   const fact = assertSchema(contracts.validateFact, assertCompletedModelEnvelope(factEnvelope), 'FACT_SCHEMA_INVALID');
@@ -95,6 +96,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     warnings: [...fact.warnings, ...phrase.warnings],
   };
   if (!business.targetRange) aggregate.warnings.push('PHRASE_OUTSIDE_TARGET_25_35');
+  if (crawl.skippedPages.length > 0) aggregate.warnings.push('OPTIONAL_PAGE_NOT_FOUND_SKIPPED');
   assertSchema(contracts.validateAggregate, aggregate, 'AGGREGATE_SCHEMA_INVALID');
 
   const template = await loadTemplate(root);
@@ -122,7 +124,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     mode,
     job_id: jobId,
     status: 'DRAFT_READY',
-    crawl: { page_count: pages.length, total_chars: crawl.totalChars, pages },
+    crawl: { page_count: pages.length, skipped_pages: crawl.skippedPages, total_chars: crawl.totalChars, pages },
     contact: contactDecision,
     phone: phoneDecision,
     analysis: aggregate,

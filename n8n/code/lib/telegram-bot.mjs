@@ -105,9 +105,13 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     }
     if (!stateStore) jobs.set(jobId, { inputUrl, regeneration, status: 'ANALYZING', createdAt: now() });
     try {
-      if (stateStore) await stateStore.reserveAnalysis(jobId, draftVersion, dailyAnalysisLimit);
       await client.sendText(chatId, `${regeneration ? 'Перегенерация' : 'Принято'} · #${jobId}\nПроверяю сайт, опубликованные контакты и evidence. Обычно это занимает до минуты.`);
-      const result = await withTyping(client, chatId, () => analyze({ inputUrl, seed, jobId }));
+      const result = await withTyping(client, chatId, () => analyze({
+        inputUrl,
+        seed,
+        jobId,
+        beforeModelCalls: stateStore ? () => stateStore.reserveAnalysis(jobId, draftVersion, dailyAnalysisLimit) : null,
+      }));
       if (result.job_id !== jobId) throw new SafeStop('BOT_JOB_ID_MISMATCH', 'Analysis returned an unexpected job identifier');
       let preview = result.telegram_preview;
       if (stateStore) {

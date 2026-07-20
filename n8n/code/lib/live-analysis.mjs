@@ -26,7 +26,7 @@ export function assertLiveAnalysisRuntime(env = process.env) {
   return Object.freeze({ liveSendEnabled, mailTransport, dailySendLimit });
 }
 
-export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, modelAdapter = null } = {}) {
+export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, beforeModelCalls = null, modelAdapter = null } = {}) {
   assertLiveAnalysisRuntime(env);
   if ((env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
 
@@ -56,6 +56,7 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
       maxOutputTokens: positiveNumber(env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_MAX_OUTPUT_TOKENS'),
     },
     onModelEnvelope,
+    beforeModelCalls,
     mode: 'guarded-live-eval',
   });
 }

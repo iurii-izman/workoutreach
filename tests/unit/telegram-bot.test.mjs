@@ -126,7 +126,10 @@ test('local stage-2 state store reserves budget, persists preview and creates on
     allowlist,
     stateStore,
     dailyAnalysisLimit: 2,
-    analyze: async ({ jobId }) => ({ job_id: jobId, telegram_preview: { text: 'preview', reply_markup: {} } }),
+    analyze: async ({ jobId, beforeModelCalls }) => {
+      await beforeModelCalls();
+      return { job_id: jobId, telegram_preview: { text: 'preview', reply_markup: {} } };
+    },
   });
 
   const created = await handler.handleUpdate(messageUpdate(20, 'https://example.com/'));
@@ -146,6 +149,25 @@ test('local stage-2 state store reserves budget, persists preview and creates on
   assert.equal(approved.action, 'MOCK_OUTBOX_CREATED');
   assert.equal(calls.at(-1)[0], 'approve');
   assert.match(client.events.find((event) => event.id === 'callback-stage2').options.text, /Email не отправлен/u);
+});
+
+test('crawl failure before the model boundary does not reserve OpenAI budget', async () => {
+  const client = createFakeClient();
+  let reserved = false;
+  const stateStore = {
+    async beginJob() { return { created: true, replay: false }; },
+    async reserveAnalysis() { reserved = true; },
+    async failJob() {},
+  };
+  const handler = createTelegramBotHandler({
+    client,
+    allowlist,
+    stateStore,
+    analyze: async () => { throw new SafeStop('FETCH_HTTP_STATUS', 'missing', { status: 404 }); },
+  });
+  const result = await handler.handleUpdate(messageUpdate(22, 'https://example.com/'));
+  assert.equal(result.code, 'FETCH_HTTP_STATUS');
+  assert.equal(reserved, false);
 });
 
 test('/approve reuses an owned immutable draft without another model call', async () => {

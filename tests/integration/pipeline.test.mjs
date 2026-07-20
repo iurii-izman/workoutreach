@@ -6,16 +6,20 @@ import { analyzeDryRun, compactEvidenceExcerpt, loadOfferProfile } from '../../n
 const root = decodeURIComponent(new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1)));
 
 test('synthetic end-to-end pipeline produces a full non-transmitted preview with evidence', async () => {
+  let budgetReservations = 0;
   const result = await analyzeDryRun({
     root,
     inputUrl: 'https://synthetic-company.example/',
     fetcher: await createFixtureFetcher(root, 'synthetic-company'),
     modelAdapter: await createModelStub(root, 'synthetic-company'),
     offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    beforeModelCalls: async () => { budgetReservations += 1; },
     seed: 'integration-1',
   });
   assert.equal(result.status, 'DRAFT_READY');
+  assert.equal(budgetReservations, 1);
   assert.equal(result.crawl.page_count, 3);
+  assert.deepEqual(result.crawl.skipped_pages, []);
   assert.equal(result.contact.selected.email, 'hello@synthetic-company.example');
   assert.equal(result.analysis.decision, 'READY_FOR_REVIEW');
   assert.ok(result.analysis.source_excerpt.length <= 500);

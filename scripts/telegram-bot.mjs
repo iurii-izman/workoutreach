@@ -145,7 +145,7 @@ async function main() {
     stateStore,
     maxRegenerations,
     dailyAnalysisLimit,
-    analyze: ({ inputUrl, seed, jobId }) => analyzeLiveCompany({ root, inputUrl, seed, jobId }),
+    analyze: ({ inputUrl, seed, jobId, beforeModelCalls }) => analyzeLiveCompany({ root, inputUrl, seed, jobId, beforeModelCalls }),
   });
   let offset = await readOffset();
   await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });
