@@ -19,7 +19,7 @@ export function assertLiveAnalysisRuntime(env = process.env) {
     && mailTransport === 'smtp'
     && Number.isSafeInteger(dailySendLimit)
     && dailySendLimit >= 1
-    && dailySendLimit <= 5;
+    && dailySendLimit <= 30;
   if (!disabledRuntime && !guardedSmtpRuntime) {
     throw new SafeStop('MAIL_CONFIG_INVALID', 'Live analysis requires either the disabled mail state or the guarded SMTP state');
   }
@@ -54,6 +54,18 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
       model: env.OPENAI_MODEL ?? 'gpt-5.6',
       effort: env.OPENAI_REASONING_EFFORT ?? 'low',
       maxOutputTokens: positiveNumber(env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_MAX_OUTPUT_TOKENS'),
+    },
+    factModelSettings: {
+      model: env.OPENAI_FACT_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6',
+      effort: env.OPENAI_FACT_REASONING_EFFORT ?? env.OPENAI_REASONING_EFFORT ?? 'low',
+      maxOutputTokens: positiveNumber(env.OPENAI_FACT_MAX_OUTPUT_TOKENS ?? env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_FACT_MAX_OUTPUT_TOKENS'),
+      promptCacheMode: env.OPENAI_FACT_PROMPT_CACHE_MODE ?? 'explicit',
+    },
+    phraseModelSettings: {
+      model: env.OPENAI_PHRASE_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6',
+      effort: env.OPENAI_PHRASE_REASONING_EFFORT ?? env.OPENAI_REASONING_EFFORT ?? 'low',
+      maxOutputTokens: positiveNumber(env.OPENAI_PHRASE_MAX_OUTPUT_TOKENS ?? env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_PHRASE_MAX_OUTPUT_TOKENS'),
+      promptCacheMode: env.OPENAI_PHRASE_PROMPT_CACHE_MODE ?? 'explicit',
     },
     onModelEnvelope,
     beforeModelCalls,

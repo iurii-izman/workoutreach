@@ -19,7 +19,11 @@ test('OpenAI adapter parses exactly one structured output without exposing tools
     fetchImpl: async (_url, options) => {
       requestBody = JSON.parse(options.body);
       return fakeResponse({
-        id: 'resp_test', status: 'completed', model: 'test-model', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        id: 'resp_test', status: 'completed', model: 'test-model', service_tier: 'default', usage: {
+          input_tokens: 10, output_tokens: 5, total_tokens: 15,
+          input_tokens_details: { cached_tokens: 2, cache_write_tokens: 4 },
+          output_tokens_details: { reasoning_tokens: 3 },
+        },
         output: [{ type: 'message', content: [{ type: 'output_text', text: '{"accepted":true}' }] }],
       });
     },
@@ -28,6 +32,10 @@ test('OpenAI adapter parses exactly one structured output without exposing tools
   assert.deepEqual(result.output, { accepted: true });
   assert.equal(result.metadata.total_tokens, undefined);
   assert.equal(result.metadata.usage.total_tokens, 15);
+  assert.equal(result.metadata.service_tier, 'default');
+  assert.equal(result.metadata.usage.input_tokens_details.cached_tokens, 2);
+  assert.equal(result.metadata.usage.input_tokens_details.cache_write_tokens, 4);
+  assert.equal(result.metadata.usage.output_tokens_details.reasoning_tokens, 3);
   assert.equal(requestBody.store, false);
   assert.deepEqual(requestBody.tools, []);
 });

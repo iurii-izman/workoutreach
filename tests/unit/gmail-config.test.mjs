@@ -20,13 +20,13 @@ test('Google app password accepts grouped input and rejects a normal password', 
   assert.throws(() => normalizeGoogleAppPassword('ordinary-password'), { code: 'GMAIL_APP_PASSWORD_INVALID' });
 });
 
-test('Gmail activation pins TLS submission and limit one without retaining plaintext password in env', () => {
+test('Gmail activation pins TLS submission and owner-approved daily capacity without retaining plaintext password in env', () => {
   const env = parseEnvText(configureGmailEnv(base));
   assert.equal(env.get('MAIL_TRANSPORT'), 'smtp');
   assert.equal(env.get('LIVE_SEND_ENABLED'), 'true');
   assert.equal(env.get('SMTP_HOST'), 'smtp.gmail.com');
   assert.equal(env.get('SMTP_PORT'), '465');
-  assert.equal(env.get('DAILY_SEND_LIMIT'), '1');
+  assert.equal(env.get('DAILY_SEND_LIMIT'), '30');
   assert.equal(env.has('SMTP_PASSWORD'), false);
 });
 

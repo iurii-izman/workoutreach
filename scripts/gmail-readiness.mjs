@@ -23,7 +23,8 @@ try {
     && String(env.get('MAIL_FROM_ADDRESS') ?? '').trim().toLowerCase() === sender;
   enabled = env.get('MAIL_TRANSPORT') === 'smtp'
     && env.get('LIVE_SEND_ENABLED') === 'true'
-    && env.get('DAILY_SEND_LIMIT') === '1';
+    && Number(env.get('DAILY_SEND_LIMIT')) >= 1
+    && Number(env.get('DAILY_SEND_LIMIT')) <= 30;
   const secret = secretText.trim();
   secretReady = secret !== 'disabled' && /^[A-Za-z0-9]{16}$/u.test(secret);
   safeCode = configured && enabled && secretReady

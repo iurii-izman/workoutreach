@@ -24,7 +24,7 @@ test('local OpenAI use is guarded by an atomic daily analysis budget', () => {
   assert.match(budgetMigration, /CREATE TABLE IF NOT EXISTS model_runs/u);
   assert.match(budgetMigration, /pg_advisory_xact_lock/u);
   assert.match(budgetMigration, /p_daily_analysis_limit NOT BETWEEN 1 AND 20/u);
-  assert.match(localCompose, /DAILY_ANALYSIS_LIMIT: \$\{DAILY_ANALYSIS_LIMIT:-2\}/u);
+  assert.match(localCompose, /DAILY_ANALYSIS_LIMIT: \$\{DAILY_ANALYSIS_LIMIT:-40\}/u);
   assert.match(localCompose, /LOCAL_OPENAI_MAX_OUTPUT_TOKENS:-1200/u);
 });
 

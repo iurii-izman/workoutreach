@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $compose = @('compose', '-f', 'compose.yaml', '-f', 'compose.local.yaml')
+Set-Location -LiteralPath $root
 
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'stop-telegram-bot.ps1') | Out-Null
 & node --env-file=.env scripts/bootstrap-local-runtime-secrets.mjs
@@ -14,6 +15,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & docker @compose up -d workoutreach-postgres workoutreach-n8n workoutreach-proxy
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & docker @compose --profile tools run --rm workoutreach-migrate
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ensure-local-workflows.ps1')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & docker @compose up -d --build workoutreach-bot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

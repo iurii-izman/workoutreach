@@ -1,11 +1,11 @@
 import { lstat, readdir, realpath } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'artifacts', '.secrets']);
 
 export function isInside(root, candidate) {
   const rel = relative(root, candidate);
-  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !resolve(rel).startsWith(sep));
+  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
 }
 
 export async function listRepoEntries(root) {
