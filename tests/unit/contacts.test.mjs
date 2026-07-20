@@ -14,8 +14,22 @@ test('classifies protected-purpose mailboxes and refuses automatic selection', (
   assert.equal(classifyEmail('jobs@example.com'), 'recruiting');
   assert.equal(classifyEmail('support@example.com'), 'support');
   assert.equal(classifyEmail('privacy@example.com'), 'privacy_or_legal');
+  assert.equal(classifyEmail('noreply@example.com'), 'system_or_automated');
   const candidate = extractContactsFromHtml('<body>jobs@example.com</body>', page);
   assert.equal(chooseContact(candidate).decision, 'NEEDS_CONTACT');
+});
+
+test('career outreach accepts one explicitly published personal business contact for human review', () => {
+  const candidates = extractContactsFromHtml('<body>Пишите galimov@business.example</body>', page);
+  const result = chooseContact(candidates, { campaignType: 'career_outreach' });
+  assert.equal(result.decision, 'SELECTED_FOR_REVIEW');
+  assert.equal(result.selected.email, 'galimov@business.example');
+  assert.equal(result.selected.category, 'personal_named');
+});
+
+test('malformed mailto values are not persisted as email candidates', () => {
+  const candidates = extractContactsFromHtml('<body><a href="mailto:tel:+79601907040">call</a></body>', page);
+  assert.deepEqual(candidates, []);
 });
 
 test('requires a human when more than one eligible address exists', () => {

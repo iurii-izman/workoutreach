@@ -2,10 +2,11 @@ import * as cheerio from 'cheerio';
 import { normalizeWhitespace } from './normalize.mjs';
 
 const EMAIL_PATTERN = /[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?)+/giu;
+const EMAIL_EXACT_PATTERN = /^[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?)+$/iu;
 const PHONE_PATTERN = /(?<![\p{L}\p{N}])(?:\+?\d[\d\s().-]{5,}\d)(?![\p{L}\p{N}])/gu;
 
 const CONTACT_POLICIES = Object.freeze({
-  career_outreach: Object.freeze({ recruiting: 0, general: 1 }),
+  career_outreach: Object.freeze({ recruiting: 0, general: 1, personal_named: 2 }),
   general_outreach: Object.freeze({ general: 0, sales: 0, personal_named: 0 }),
 });
 
@@ -14,14 +15,15 @@ export function classifyEmail(email) {
   if (/^(jobs?|career|careers|hr|rabota|vacancy|vacancies|recruit|recruiting|recruitment|talent|people|cv|resume)$/u.test(local)) return 'recruiting';
   if (/^(support|help|service|tech)$/u.test(local)) return 'support';
   if (/^(privacy|legal|dpo|abuse|security)$/u.test(local)) return 'privacy_or_legal';
+  if (/^(?:no-?reply|do-?not-?reply|mailer-daemon|postmaster|webmaster|admin|root)$/u.test(local)) return 'system_or_automated';
   if (/^(sales|commercial|bizdev|partners?)$/u.test(local)) return 'sales';
   if (/^(info|contact|hello|office|mail)$/u.test(local)) return 'general';
-  if (/^[\p{L}]+[._-][\p{L}]+$/u.test(local)) return 'personal_named';
+  if (/^[\p{L}]{3,40}(?:[._-][\p{L}]{2,40})?$/u.test(local)) return 'personal_named';
   return 'unknown';
 }
 
 function validEmail(email) {
-  return email.length <= 254 && !email.includes('..') && !email.startsWith('.') && !email.endsWith('.');
+  return email.length <= 254 && EMAIL_EXACT_PATTERN.test(email) && !email.includes('..') && !email.startsWith('.') && !email.endsWith('.');
 }
 
 export function extractContactsFromHtml(html, page) {

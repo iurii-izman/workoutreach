@@ -1,9 +1,9 @@
 # Provider and production compliance gate
 
-No mail provider is selected and no live send is implemented in stages 0–2. Stage 2 has a database-enforced mock transport only.
+A single-owner Gmail SMTP adapter is selected for the local Stage 3 path. It uses a dedicated app password in a Docker Secret, TLS submission, a one-message daily campaign limit, database suppression checks and explicit Telegram approval. Stage 2 retains its database-enforced mock transport for CI and offline verification.
 
-The active owner-approved use case is individualized career outreach by one candidate to published business contacts of Bitrix24 integrators in Kazakhstan. Recruiting addresses are preferred and a fixed reply-based opt-out is present. These product choices are not a legal determination and do not authorize bulk sending, automatic sending, purchased contact data, mailbox guessing, or expansion to another country.
+The active owner-approved use case is individualized career outreach by one candidate to published business contacts of Bitrix24 integrators in Kazakhstan. Recruiting addresses are preferred, followed by general mailboxes and then a single explicitly published named business contact. Every selected address and complete message remains subject to human review, and a fixed reply-based opt-out is present. These product choices are not a legal determination and do not authorize bulk sending, automatic sending, purchased contact data, mailbox guessing, or expansion to another country.
 
-Before stage 3, the owner must record target countries and recipient categories, outreach purpose and lawful basis, provider approval for the use case, corporate domain, visible opt-out text, reply handling, and SPF/DKIM/DMARC status. Provider acceptance must never be described as inbox delivery.
+Before a broader pilot, the owner must record target countries and recipient categories, outreach purpose and lawful basis, provider approval for the use case, visible opt-out handling, reply processing and any future sender-domain SPF/DKIM/DMARC status. Provider acceptance must never be described as inbox delivery.
 
-`LIVE_SEND_ENABLED=true` or a non-disabled mail transport causes current preflight to fail. This document remains incomplete until the owner supplies the missing sender/provider decisions and obtains any needed legal review.
+CI preflight still forces `LIVE_SEND_ENABLED=false` and a disabled mail transport. Local activation is owner-only and documented in the SMTP runbook. Provider-policy confirmation, reply/bounce ingestion and any needed legal review remain incomplete gates before scale-up.
