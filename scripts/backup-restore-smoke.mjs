@@ -28,9 +28,9 @@ try {
   docker(['pg_restore', '-U', 'workoutreach_admin', '-d', testDatabase, '--exit-on-error', dumpPath]);
   const restored = docker([
     'psql', '-X', '-Atq', '-v', 'ON_ERROR_STOP=1', '-U', 'workoutreach_admin', '-d', testDatabase,
-    '-c', "SELECT json_build_object('migration_count', count(*), 'has_stage2', bool_or(version = '003_stage_2_mock_outbox'), 'has_local_runtime', bool_or(version = '004_local_stage_2_runtime'), 'has_model_budget', bool_or(version = '005_local_model_budget'), 'has_smtp', bool_or(version = '006_guarded_smtp_delivery'), 'has_stage3_sendability', bool_or(version = '007_stage_3_template_sendability')) FROM workoutreach.schema_migrations;",
+    '-c', "SELECT json_build_object('migration_count', count(*), 'has_stage2', bool_or(version = '003_stage_2_mock_outbox'), 'has_local_runtime', bool_or(version = '004_local_stage_2_runtime'), 'has_model_budget', bool_or(version = '005_local_model_budget'), 'has_smtp', bool_or(version = '006_guarded_smtp_delivery'), 'has_stage3_sendability', bool_or(version = '007_stage_3_template_sendability'), 'has_dashboard', bool_or(version = '008_local_operator_dashboard')) FROM workoutreach.schema_migrations;",
   ], { capture: true });
-  if (!restored.includes('"has_stage2" : true') || !restored.includes('"has_local_runtime" : true') || !restored.includes('"has_model_budget" : true') || !restored.includes('"has_smtp" : true') || !restored.includes('"has_stage3_sendability" : true')) throw new Error('Restored database is missing a required migration');
+  if (!restored.includes('"has_stage2" : true') || !restored.includes('"has_local_runtime" : true') || !restored.includes('"has_model_budget" : true') || !restored.includes('"has_smtp" : true') || !restored.includes('"has_stage3_sendability" : true') || !restored.includes('"has_dashboard" : true')) throw new Error('Restored database is missing a required migration');
   const evidence = { ok: true, source_database: 'workoutreach_business', restore_database: testDatabase, format: 'custom', restored_check: restored };
   mkdirSync(resolve(root, 'artifacts/evidence'), { recursive: true });
   writeFileSync(resolve(root, 'artifacts/evidence/backup-restore-smoke.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');

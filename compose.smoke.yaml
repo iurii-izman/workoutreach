@@ -11,8 +11,14 @@ services:
     container_name: workoutreach-smoke-proxy
     ports: !override []
 
+  workoutreach-dashboard:
+    container_name: workoutreach-smoke-dashboard
+
   workoutreach-migrate:
     container_name: workoutreach-smoke-migrate
+
+  workoutreach-dashboard-provision:
+    container_name: workoutreach-smoke-dashboard-provision
 
   workoutreach-bot-smoke:
     container_name: workoutreach-smoke-bot

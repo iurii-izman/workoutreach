@@ -9,6 +9,7 @@ dist/
 .n8n/
 .runtime/
 .playwright-cli/
+output/
 *.log
 *.tmp
 .DS_Store

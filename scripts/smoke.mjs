@@ -24,19 +24,22 @@ try {
     run('docker', ['compose', 'cp', `artifacts/workflow-import/${file}`, `workoutreach-n8n:/tmp/${file}`]);
     run('docker', ['compose', 'exec', '-T', 'workoutreach-n8n', '/workoutreach/n8n-entrypoint.sh', 'import:workflow', `--input=/tmp/${file}`]);
   }
+  run('docker', ['compose', '--profile', 'tools', 'run', '--rm', 'workoutreach-dashboard-provision']);
   run('docker', ['compose', '--profile', 'tools', 'run', '--rm', 'workoutreach-migrate']);
-  run('docker', ['compose', 'exec', '-T', 'workoutreach-postgres', 'psql', '-U', 'workoutreach_admin', '-d', 'workoutreach_business', '-c', "SELECT version FROM workoutreach.schema_migrations WHERE version IN ('001_stage_0_1','002_owner_campaign_stage_1','003_stage_2_mock_outbox','004_local_stage_2_runtime','005_local_model_budget','006_guarded_smtp_delivery','007_stage_3_template_sendability') ORDER BY version;"]);
+  run('docker', ['compose', 'exec', '-T', 'workoutreach-postgres', 'psql', '-U', 'workoutreach_admin', '-d', 'workoutreach_business', '-c', "SELECT version FROM workoutreach.schema_migrations WHERE version IN ('001_stage_0_1','002_owner_campaign_stage_1','003_stage_2_mock_outbox','004_local_stage_2_runtime','005_local_model_budget','006_guarded_smtp_delivery','007_stage_3_template_sendability','008_local_operator_dashboard') ORDER BY version;"]);
   run('node', ['scripts/stage2-db-smoke.mjs']);
   run('docker', ['compose', '--profile', 'tools', 'run', '--rm', '--build', 'workoutreach-bot-smoke']);
   run('node', ['scripts/smtp-db-smoke.mjs']);
+  run('node', ['scripts/dashboard-db-smoke.mjs']);
   run('node', ['scripts/backup-restore-smoke.mjs']);
   mkdirSync(resolve(root, 'artifacts/evidence'), { recursive: true });
   writeFileSync(resolve(root, 'artifacts/evidence/docker-smoke.json'), `${JSON.stringify({
     ok: true,
     images: { postgres: 'healthy', n8n: 'healthy', caddy: 'healthy' },
     workflows_imported: 6,
-    migrations: ['001_stage_0_1', '002_owner_campaign_stage_1', '003_stage_2_mock_outbox', '004_local_stage_2_runtime', '005_local_model_budget', '006_guarded_smtp_delivery', '007_stage_3_template_sendability'],
+    migrations: ['001_stage_0_1', '002_owner_campaign_stage_1', '003_stage_2_mock_outbox', '004_local_stage_2_runtime', '005_local_model_budget', '006_guarded_smtp_delivery', '007_stage_3_template_sendability', '008_local_operator_dashboard'],
     stage2_mock_outbox: { replay: 'passed', concurrency: 'passed', suppression: 'passed', mail_transmitted: false },
+    dashboard: { database_contract: 'passed', synthetic_only: true, external_calls: 0 },
     local_stage2_runtime: { restart_recovery: 'passed', draft_versions: 2, replay_outbox_rows: 1, openai_calls: 0 },
     backup_restore: 'passed',
     live_send_enabled: false,

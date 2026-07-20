@@ -13,6 +13,7 @@ services:
       - postgres_admin_password
       - n8n_db_password
       - business_db_password
+      - dashboard_db_password
     volumes:
       - workoutreach_postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/010-workoutreach.sh:ro
@@ -95,6 +96,7 @@ services:
     restart: unless-stopped
     environment:
       WORKOUTREACH_DOMAIN: ${WORKOUTREACH_DOMAIN:-workoutreach.localhost}
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:-dashboard.workoutreach.localhost}
     ports:
       - "127.0.0.1:443:443"
     volumes:
@@ -106,6 +108,8 @@ services:
       - workoutreach_internal
     depends_on:
       workoutreach-n8n:
+        condition: service_healthy
+      workoutreach-dashboard:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
@@ -133,6 +137,64 @@ services:
     depends_on:
       workoutreach-postgres:
         condition: service_healthy
+
+  workoutreach-dashboard-provision:
+    image: postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    container_name: workoutreach-dashboard-provision
+    profiles: ["tools"]
+    entrypoint: ["/workoutreach/provision-dashboard.sh"]
+    secrets:
+      - postgres_admin_password
+      - dashboard_db_password
+    volumes:
+      - ./docker/postgres/provision-dashboard.sh:/workoutreach/provision-dashboard.sh:ro
+    networks:
+      - workoutreach_internal
+    depends_on:
+      workoutreach-postgres:
+        condition: service_healthy
+
+  workoutreach-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: workoutreach-dashboard:local
+    container_name: workoutreach-dashboard
+    restart: unless-stopped
+    environment:
+      DASHBOARD_HOST: ${DASHBOARD_DOMAIN:-dashboard.workoutreach.localhost}
+      DASHBOARD_PORT: "3000"
+      WORKOUTREACH_DB_HOST: workoutreach-postgres
+      WORKOUTREACH_DB_PORT: "5432"
+      WORKOUTREACH_DB_NAME: workoutreach_business
+      TZ: UTC
+    secrets:
+      - dashboard_db_password
+      - dashboard_password_hash
+      - dashboard_session_secret
+    networks:
+      - workoutreach_internal
+    depends_on:
+      workoutreach-postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get({host:'127.0.0.1',port:3000,path:'/healthz',headers:{Host:process.env.DASHBOARD_HOST}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 192M
 
   workoutreach-bot-smoke:
     build:
@@ -169,6 +231,12 @@ secrets:
     file: ./.secrets/n8n_encryption_key
   suppression_hmac_key:
     file: ./.secrets/suppression_hmac_key
+  dashboard_db_password:
+    file: ./.secrets/dashboard_db_password
+  dashboard_password_hash:
+    file: ./.secrets/dashboard_password_hash
+  dashboard_session_secret:
+    file: ./.secrets/dashboard_session_secret
 
 volumes:
   workoutreach_postgres_data:

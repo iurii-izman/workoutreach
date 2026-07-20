@@ -2,6 +2,8 @@
 
 Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. A guarded single-owner Gmail SMTP adapter is implemented but remains disabled until the owner locally supplies and verifies a Google app password.
 
+The project also includes a local read-mostly operator dashboard. It is deliberately not a CRM or a send channel: it shows company-level delivery/engagement state and permits only guarded manual engagement updates.
+
 `TECHNICAL_SPEC.md` is the contract. `AGENTS.md` defines the durable repository isolation and safety policy.
 
 ## Current safety state
@@ -90,6 +92,18 @@ npm run smoke:docker
 This command creates development-only secret files under ignored `.secrets/` only when missing and reuses them on later runs, starts only the pinned Workoutreach Compose project, applies migrations, queries migration evidence, then removes its test containers and volumes. It never silently rotates secrets behind an existing PostgreSQL volume.
 It also proves approval replay/concurrency, suppression-at-approval, suppression-at-dispatch, mock claiming, and a business-database backup/restore into a clean temporary database.
 
+## Local operator dashboard
+
+Run the one-time interactive setup:
+
+```powershell
+npm run dashboard:setup
+```
+
+Then open `https://dashboard.workoutreach.localhost`. Setup stores only a scrypt password hash plus separate DB/session Docker Secrets, provisions the least-privilege role for both clean and existing PostgreSQL volumes, applies migration 008, and starts the internal-only container. Before migrating an existing running database it writes an ignored owner-only custom-format backup without printing rows.
+
+Use `npm run dashboard:start`, `npm run dashboard:status` and `npm run dashboard:stop` for normal operation. The default tab shows only «Отправлено · ждём ответа». A real send means exactly `smtp + SMTP_ACCEPTED` and is labelled «Отправлено — принято Gmail SMTP»; mock rows are labelled «Тест — email не отправлен». See [the dashboard runbook](docs/runbooks/local-operator-dashboard.md).
+
 For a committed clean-clone reproduction entirely below this repository root:
 
 ```powershell
@@ -107,6 +121,7 @@ npm run smoke:clean-clone
 - `fixtures/` — synthetic source/model/offer evidence;
 - `scripts/` — preflight, scans, SBOM, workflow validation and smoke commands;
 - `docs/adr/` and `docs/runbooks/` — decisions and operating procedures.
+- `dashboard/` — local authenticated read-mostly company UI and constrained API;
 
 ## Implemented Stage 2 safety boundary
 

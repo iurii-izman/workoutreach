@@ -9,3 +9,17 @@
 		-Server
 	}
 }
+
+{$DASHBOARD_DOMAIN:dashboard.workoutreach.localhost} {
+	tls internal
+	encode zstd gzip
+	reverse_proxy workoutreach-dashboard:3000 {
+		header_up Host {host}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}

@@ -1,0 +1,12 @@
+FROM node:24.18.0-alpine@sha256:4ba75f835bb8802193e4c114572113d4b26f95f6f094f4b5229d2a77773e0afc
+
+WORKDIR /workoutreach
+
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+COPY --chown=node:node dashboard/ ./dashboard/
+
+USER node
+EXPOSE 3000
+CMD ["node", "dashboard/server.mjs"]

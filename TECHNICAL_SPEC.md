@@ -1,7 +1,7 @@
 # Workoutreach — техническое задание
 
-> Статус: Final v1.1 — Strict Greenfield  
-> Дата: 16 июля 2026 года  
+> Статус: Final v1.2 — Strict Greenfield + local operator dashboard
+> Дата: 20 июля 2026 года
 > Целевой каталог: `C:\Dev\workoutreach`  
 > Назначение: единый источник требований для реализации самостоятельного продукта в новом проекте и новом чате Codex.  
 > Режим происхождения: 0% donor code/data/config; 100% новая project-authored реализация.
@@ -103,6 +103,8 @@
 - headless browser для каждого сайта;
 - multi-tenant режим;
 - AI Agent с инструментами и правом выполнять действия.
+
+Исключение, принятое ADR-0009: локальная read-mostly операторская панель компаний входит в продукт как операционная витрина. Она не является CRM, не добавляет sequences/follow-up automation, не редактирует письма и не является новым approval- или send-каналом.
 
 ## 5. Пользовательский сценарий
 
@@ -541,6 +543,30 @@ PostgreSQL — источник истины; n8n execution history не исп�
 - миграции в Git, ручное изменение production schema запрещено.
 
 n8n metadata и outreach business data должны использовать отдельные базы или как минимум отдельные роли/схемы с минимальными правами.
+
+### 16.1. Локальная операторская панель
+
+ADR-0009 добавляет отдельный локальный сервис `workoutreach-dashboard` по адресу `https://dashboard.workoutreach.localhost`. Это read-mostly операционная витрина, а не CRM и не новый канал отправки. Она не может отправить/повторить письмо, подтвердить Telegram draft, вызвать OpenAI, изменить `jobs`/`outbox`, редактировать immutable drafts/analyses, создать фиктивный provider event, удалить историю или снять suppression.
+
+Технический delivery status вычисляется только из `jobs`, `outbox` и `message_events`. Единственный текущий признак реальной отправки: `outbox.transport='smtp' AND outbox.status='SMTP_ACCEPTED'`. UI называет его «Отправлено — принято Gmail SMTP» и обязательно поясняет, что acceptance не подтверждает доставку во входящие или прочтение. Mock, approval, draft, Gmail self-test, `SMTP_PENDING` и `SMTP_CLAIMED` отправкой не считаются.
+
+Отдельный engagement status компании в кампании принимает только:
+
+- `NOT_CONTACTED` — «Не отправлено»;
+- `SENT_WAITING` — «Отправлено · ждём ответа»;
+- `REPLIED` — «Ответили»;
+- `INTERESTED` — «Есть интерес»;
+- `FOLLOW_UP_LATER` — «Вернуться позже»;
+- `NOT_INTERESTED` — «Не актуально»;
+- `DO_NOT_CONTACT` — «Не связываться».
+
+`SENT_WAITING` и неизменяемый вручную `sent_at` появляются только после SMTP acceptance. `FOLLOW_UP_LATER` требует `next_action_at`. `DO_NOT_CONTACT` требует отдельного подтверждения, терминален в UI и блокирует новые outbox-команды на уровне БД. При просьбе адресата одна серверная транзакция добавляет в suppression HMAC точного адресата принятого письма; dashboard не получает HMAC secret.
+
+Миграция 008 создаёт `companies`, связь `jobs.company_id`, `company_campaign_state`, append-only `company_status_history` и versioned dashboard views. Одна строка списка соответствует компании и кампании; hostname является уникальным каноническим ключом, а имя берётся только из подтверждённого immutable analysis с fallback на hostname. Отправленный draft связывается точной парой `outbox.job_id + outbox.draft_version`.
+
+Отдельная роль `workoutreach_dashboard` имеет SELECT только на dashboard views и EXECUTE на ограниченные dashboard-функции. Status update использует `SECURITY DEFINER`, фиксированный `search_path`, allowlists, row lock, expected version, идемпотентный action key, append-only history и безопасный audit event. Для существующего volume роль provisionится отдельной идемпотентной командой, а не только init hook.
+
+Сервис работает на Node.js 24 + `pg` + vanilla HTML/CSS/JavaScript, подключён только к internal network, не имеет host port/egress и SMTP/OpenAI/Telegram secrets, запускается non-root с read-only filesystem, dropped capabilities и `no-new-privileges`. Вход защищён scrypt password hash, ограничением попыток, короткой host-only Secure/HttpOnly/SameSite=Strict session, CSRF, exact Host/Origin, CSP, method/content-type/body limits и parameterized SQL.
 
 ## 17. Идемпотентность, retry и сбои
 

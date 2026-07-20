@@ -16,6 +16,8 @@ The CV is an authorized owner input but remains an external read-only runtime as
 
 The public Bitrix24 Kazakhstan partner catalog is an authorized seed source. `npm run catalog:stage` reads only the catalog and its bounded partner profiles, respects `robots.txt`, makes no model calls, creates only an ignored `REVIEW_REQUIRED` snapshot and never authorizes transmission. On 2026-07-19 the rendered Kazakhstan catalog exposed 12 partner profiles; this dynamic observation must not be generalized to the previously estimated 200+ companies or to other countries.
 
+The local operator dashboard, migration 008, synthetic dashboard smoke fixtures, ADR-0009 and its runbook were newly authored on 2026-07-20 from the owner's direct dashboard requirements, the project contract and existing project-owned schema. No donor repository or external application source was consulted.
+
 ## First-commit evidence
 
 The repository root commit is `70b54615815fe254f61a19f5c44c4c7732222bb6` and contains only `TECHNICAL_SPEC.md`.
