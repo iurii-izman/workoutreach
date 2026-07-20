@@ -438,7 +438,7 @@ Refusal, incomplete output/truncation, отсутствие обязательн
 
 ## 13. Шаблон письма
 
-AI не генерирует письмо целиком. Тема, основной текст, подпись и opt-out хранятся как утверждённые versioned templates.
+AI не генерирует письмо целиком. Тема, основной текст и подпись хранятся как утверждённые versioned templates. В индивидуальном пилоте до 50 вручную проверенных писем отдельная opt-out-фраза в теле письма не используется; любой отрицательный ответ вручную вносится в suppression до следующего контакта.
 
 Минимальные файлы:
 
@@ -464,7 +464,7 @@ product/offer-profile.v1.yaml
 - plain-text версия обязательна;
 - template version и hash сохраняются с draft;
 - после подтверждения draft immutable;
-- model output никогда не может изменить подпись, ссылки, адрес отправителя или opt-out.
+- model output никогда не может изменить подпись, ссылки, адрес отправителя или правила suppression.
 
 ## 14. Telegram и подтверждение
 
@@ -641,7 +641,7 @@ Public email не равен согласию. До live pilot владелец 
 
 Resend, Postmark, SES и другие ESP нельзя выбирать «по умолчанию»: их AUP/ToS и согласование конкретного use case проверяются до интеграции. Для cold/scraped outreach многие провайдеры вводят прямые ограничения.
 
-При поддержке выбранным transport для promotional mail добавляются RFC 8058 one-click headers; текстовая отписка остаётся обязательной. Endpoint отписки должен быть HTTPS, без логина, идемпотентным и сразу обновлять suppression.
+Перед автоматизированной или более широкой promotional-эксплуатацией при поддержке transport добавляются RFC 8058 one-click headers и явный текстовый механизм отказа. Endpoint отписки должен быть HTTPS, без логина, идемпотентным и сразу обновлять suppression. В текущем индивидуальном пилоте любой отказ или просьба не писать обрабатывается владельцем вручную и немедленно обновляет suppression.
 
 ## 19. Строгий greenfield и изоляция от доноров
 
@@ -926,7 +926,7 @@ MVP принят, если одновременно выполнено след�
 15. В Git нет секретов, runtime payload, donor artifacts, legacy namespace и PII fixtures.
 16. PostgreSQL backup успешно восстановлен в чистом тестовом окружении.
 17. Перед live pilot вручную оценены минимум 50 разных сайтов без отправки; все принятые факты подтверждены человеком, а unsafe/insufficient cases корректно остановлены.
-18. Live pilot не включается, пока SPF, DKIM, DMARC monitoring, suppression, opt-out, provider policy и legal scope не зафиксированы в документации.
+18. Live pilot не включается, пока SPF, DKIM, DMARC monitoring, suppression, обработка отказов/ответов, provider policy и legal scope не зафиксированы в документации.
 19. Greenfield guard подтверждает отсутствие submodules, external symlink/junction, path dependencies, bind mounts, donor paths и файлов вне repository root.
 20. Для всех third-party dependencies сформированы pinned inventory, license review, `THIRD_PARTY_NOTICES.md` и SBOM; каждый fixture имеет provenance и PII-check.
 

@@ -69,7 +69,8 @@ test('template escapes HTML values and is owner-approved for guarded sending', a
   assert.match(draft.body_html, /&lt;b&gt;безопасная фраза&lt;\/b&gt;/u);
   assert.equal(draft.sendable, true);
   assert.deepEqual(template.manifest.allowed_placeholders, ['COMPANY_NAME', 'PERSONALIZATION_PHRASE']);
-  assert.match(draft.body_text, /Если такие обращения для вашей компании неактуальны/u);
+  assert.doesNotMatch(draft.body_text, /Если такие обращения|больше не буду писать/u);
+  assert.doesNotMatch(draft.body_html, /Если такие обращения|больше не буду писать/u);
 });
 
 test('business gate enforces one sentence, one claim and a hard maximum of 40 words', () => {
