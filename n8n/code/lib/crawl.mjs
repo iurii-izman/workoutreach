@@ -106,17 +106,37 @@ export async function crawlSite(input, fetcher, limits = {}) {
     seen.add(current.href);
     let response;
     try {
-      response = await fetcher(current.href);
+      try {
+        response = await fetcher(current.href);
+      } catch (error) {
+        const retrySubmittedRoot = current.href === root.href
+          && error instanceof SafeStop
+          && error.code === 'FETCH_TIMEOUT';
+        if (!retrySubmittedRoot) throw error;
+        response = await fetcher(current.href);
+      }
     } catch (error) {
       const optionalGone = current.href !== root.href
         && error instanceof SafeStop
         && error.code === 'FETCH_HTTP_STATUS'
         && [404, 410].includes(Number(error.details?.status));
-      if (!optionalGone) throw error;
-      skippedPages.push({ url: current.href, code: error.code, status: Number(error.details.status) });
+      const optionalTimeout = current.href !== root.href
+        && error instanceof SafeStop
+        && error.code === 'FETCH_TIMEOUT';
+      if (!optionalGone && !optionalTimeout) throw error;
+      skippedPages.push(optionalGone
+        ? { url: current.href, code: error.code, status: Number(error.details.status) }
+        : { url: current.href, code: error.code });
       continue;
     }
     if (Date.now() - started > options.jobTimeoutMs) throw new SafeStop('CRAWL_TIMEOUT', 'Job crawl budget exceeded');
+    const finalUrl = new URL(response.url).href;
+    if (pages.some((page) => page.source_url === finalUrl)) {
+      seen.add(finalUrl);
+      skippedPages.push({ url: current.href, final_url: finalUrl, code: 'DUPLICATE_FINAL_URL' });
+      continue;
+    }
+    seen.add(finalUrl);
     const parsed = htmlToPage(response.body, response.url, options.maxTextChars - totalChars);
     if (!parsed.text) continue;
     totalChars += parsed.text.length;

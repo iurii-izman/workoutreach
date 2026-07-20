@@ -51,3 +51,37 @@ test('crawler still fails when the submitted root page is missing', async () => 
   };
   await assert.rejects(crawlSite('https://example.com/', fetcher), { code: 'FETCH_HTTP_STATUS' });
 });
+
+test('crawler retries one submitted-root timeout and skips a timed-out optional page', async () => {
+  let rootAttempts = 0;
+  const fetcher = async (url) => {
+    const path = new URL(url).pathname;
+    if (path === '/robots.txt') return { url, body: 'User-agent: *\n' };
+    if (path === '/') {
+      rootAttempts += 1;
+      if (rootAttempts === 1) throw new SafeStop('FETCH_TIMEOUT', 'temporary timeout');
+      return { url, body: '<body>home<a href="/slow">slow</a><a href="/about">about</a></body>' };
+    }
+    if (path === '/slow') throw new SafeStop('FETCH_TIMEOUT', 'optional timeout');
+    return { url, body: '<body>usable about page</body>' };
+  };
+  const result = await crawlSite('https://example.com/', fetcher, { maxPages: 6 });
+  assert.equal(rootAttempts, 2);
+  assert.equal(result.pages.length, 2);
+  assert.deepEqual(result.skippedPages, [{ url: 'https://example.com/slow', code: 'FETCH_TIMEOUT' }]);
+});
+
+test('crawler stores a redirected final URL once', async () => {
+  const fetched = [];
+  const fetcher = async (url) => {
+    const parsed = new URL(url);
+    fetched.push(parsed.pathname);
+    if (parsed.pathname === '/robots.txt') return { url, body: 'User-agent: *\n' };
+    if (parsed.pathname === '/') return { url, body: '<body>home<a href="/crm">first</a><a href="/crm/">second</a></body>' };
+    return { url: 'https://example.com/crm/', body: '<body>CRM page</body>' };
+  };
+  const result = await crawlSite('https://example.com/', fetcher, { maxPages: 6 });
+  assert.deepEqual(result.pages.map((page) => page.source_url), ['https://example.com/', 'https://example.com/crm/']);
+  assert.equal(fetched.filter((path) => path === '/crm' || path === '/crm/').length, 1);
+  assert.deepEqual(result.skippedPages, []);
+});

@@ -96,7 +96,8 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     warnings: [...fact.warnings, ...phrase.warnings],
   };
   if (!business.targetRange) aggregate.warnings.push('PHRASE_OUTSIDE_TARGET_25_35');
-  if (crawl.skippedPages.length > 0) aggregate.warnings.push('OPTIONAL_PAGE_NOT_FOUND_SKIPPED');
+  if (crawl.skippedPages.some((page) => page.code === 'FETCH_HTTP_STATUS')) aggregate.warnings.push('OPTIONAL_PAGE_NOT_FOUND_SKIPPED');
+  if (crawl.skippedPages.some((page) => page.code === 'FETCH_TIMEOUT')) aggregate.warnings.push('OPTIONAL_PAGE_TIMEOUT_SKIPPED');
   assertSchema(contracts.validateAggregate, aggregate, 'AGGREGATE_SCHEMA_INVALID');
 
   const template = await loadTemplate(root);
