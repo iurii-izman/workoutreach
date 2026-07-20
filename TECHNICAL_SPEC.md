@@ -1,6 +1,6 @@
 # Workoutreach — техническое задание
 
-> Статус: Final v1.2 — Strict Greenfield + local operator dashboard
+> Статус: Final v1.3 — owner capacity + immutable migrations
 > Дата: 20 июля 2026 года
 > Целевой каталог: `C:\Dev\workoutreach`  
 > Назначение: единый источник требований для реализации самостоятельного продукта в новом проекте и новом чате Codex.  
@@ -348,6 +348,9 @@ Email извлекаются до AI-вызовов:
 - имя модели хранить в конфигурации, а фактический model ID — в каждой записи анализа;
 - quality reference для первоначального manual eval: актуальный alias `gpt-5.6` (Sol на момент утверждения ТЗ);
 - `gpt-5.6-terra` является production-кандидатом на снижение стоимости только после сравнения на том же представительном eval-наборе: без регрессии по evidence/factuality hard gates и без роста неподтверждённых утверждений;
+- fact extraction и phrase generation имеют независимые model settings, но по умолчанию сохраняют quality reference до одинакового representative eval;
+- для уникальных company payloads implicit prompt-cache breakpoint отключён через explicit cache mode без breakpoint; cache включается только при измеримом повторном prefix reuse;
+- ChatGPT subscription/web-session не используется как API credential: приложение переиспользует только существующий project API key из Docker Secret;
 - reasoning effort задаётся явно, начинается с минимального уровня, прошедшего eval, и не повышается без измеримого улучшения;
 - конкретную модель или effort разрешается менять только отдельным конфигурационным изменением после одинакового eval, с фиксацией качества, latency и стоимости;
 - prompt, schema и offer profile версионируются, их hashes сохраняются с результатом.
@@ -605,7 +608,7 @@ Public email не равен согласию. До live pilot владелец 
 
 - только низкообъёмная персональная 1:1 отправка;
 - обязательное human approval каждого письма;
-- консервативный pilot 5–10 писем в день как внутренняя рекомендация, не как гарантия провайдера;
+- постепенный pilot остаётся внутренней рекомендацией; owner-approved техническая ёмкость ограничена максимумом 30 писем в UTC-день и не является гарантией провайдера;
 - действующий корпоративный mailbox через OAuth;
 - выбранный провайдер должен разрешать конкретный тип отправки по своим условиям;
 - никакого tracking pixel и скрытого click tracking;
@@ -773,7 +776,7 @@ Startup/preflight должен завершаться ошибкой при plac
 
 Каждое задание имеет correlation ID. Alert в Telegram содержит ID, этап и безопасное описание, но не raw exception.
 
-На уровне приложения задаётся жёсткий daily send limit. Изменение лимита — конфигурационное действие владельца, а не команда модели или содержимое сайта.
+На уровне приложения и БД задаётся жёсткий daily send limit: owner-approved максимум 30 отправок и локальная ёмкость 40 анализов в UTC-день. Это конечный safety ceiling, а не «безлимит». Изменение лимита — конфигурационное действие владельца, а не команда модели или содержимое сайта.
 
 ## 24. Структура нового репозитория
 
@@ -920,10 +923,11 @@ MVP принят, если одновременно выполнено след�
 - `.gitignore` и `.env.example` без production-значений;
 - pinned Compose: n8n + PostgreSQL + HTTPS proxy с project-owned names;
 - миграции и preflight;
+- version-aware migration runner с PostgreSQL advisory lock, SHA-256 registry и запретом изменения уже применённых migrations;
 - test runner, workflow validator, greenfield guard и secret scan;
 - никаких секретов, live credentials, path dependencies, external links или donor artifacts.
 
-Gate: clean start, healthchecks, migrations, tests, preflight, greenfield/secret/license scans и SBOM generation проходят; clean clone воспроизводится без доступа к другим локальным репозиториям.
+Gate: clean start, healthchecks, однократное применение migrations, повторный no-op migration pass, checksum registry, tests, preflight, greenfield/secret/license scans и SBOM generation проходят; clean clone воспроизводится без доступа к другим локальным репозиториям.
 
 ### Этап 1 — dry-run
 
@@ -949,7 +953,7 @@ Gate: критерии 1–9 и security tests пройдены; владеле�
 - mock transport и точные статусы.
 - локальный allowlisted Telegram `getUpdates` long polling без публичного порта или домена;
 - PostgreSQL как источник истины для update idempotency, evidence, immutable drafts и restart recovery;
-- атомарная резервация дневного бюджета анализа до OpenAI: локальный default 2 анализа UTC/сутки, строго 2 model calls на анализ;
+- атомарная резервация дневного бюджета анализа до OpenAI: локальная owner-approved ёмкость 40 анализов UTC/сутки, строго 2 model calls на успешный анализ;
 - n8n доступен локально, но не является обязательным critical path для Stage 2; публичный webhook остаётся будущей опцией.
 
 Gate: 0 дублей во всех повторных и конкурентных тестах; container restart сохраняет job/draft/action; mail transport отсутствует; тесты не расходуют OpenAI credits.
@@ -962,7 +966,7 @@ Gate: 0 дублей во всех повторных и конкурентны�
 - webhook/polling events;
 - reply и suppression runbooks;
 - тестовые письма только на адреса владельца.
-- минимальный локальный adapter может использовать authenticated SMTP submission на 465/587 с TLS 1.2+, dedicated app password в Docker Secret и default daily limit 1;
+- минимальный локальный adapter может использовать authenticated SMTP submission на 465/587 с TLS 1.2+, dedicated app password в Docker Secret и database-enforced daily limit не выше 30;
 - после SMTP acceptance неизвестный/оборванный результат автоматически не повторяется, чтобы исключить дубль;
 - перед каждой отправкой CV повторно проверяется по filename, PDF signature, size и утверждённому SHA-256.
 
@@ -971,7 +975,7 @@ Gate: владелец подтверждает тесты, provider policy, DNS
 ### Этап 4 — ограниченный pilot
 
 - минимум 50 dry-run reviews завершены;
-- daily limit 5–10;
+- плавное наращивание объёма рекомендуется; абсолютный owner-approved daily ceiling — 30;
 - human approval каждого письма;
 - ежедневный контроль bounce/complaint/reply;
 - немедленный kill switch.

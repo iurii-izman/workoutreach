@@ -67,7 +67,7 @@ The bot answers `/start`, `/help`, `/status`, `/version`, accepts one company UR
 
 Use `npm run local:stop` to stop containers without deleting their named volumes. Docker Desktop must be running; enable its own “Start Docker Desktop when you sign in” option if the bot should recover automatically after Windows login. Container restart policy is `unless-stopped`. See [the local Stage-2 runbook](docs/runbooks/local-stage2.md).
 
-The conservative default `DAILY_ANALYSIS_LIMIT=2` means no more than four OpenAI calls per UTC day. Set it to `1` in ignored `.env` for single-site calibration. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
+The owner-approved local capacity is `DAILY_ANALYSIS_LIMIT=40`, with two independent OpenAI calls reserved per analysis. The SMTP ceiling is 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
 ## Stage the Bitrix24 Kazakhstan catalog
 
@@ -81,7 +81,7 @@ The bounded reader respects `robots.txt`, accepts only canonical Kazakhstan part
 
 ## Activate the selected Gmail mailbox
 
-See [the Gmail SMTP activation runbook](docs/runbooks/smtp-activation.md). After creating a Google app password, run `npm run gmail:setup`; its hidden prompt stores the credential only in ignored `.secrets/smtp_password` and leaves delivery disabled. `npm run gmail:status` reports state without exposing it. `npm run gmail:self-test` authenticates SMTP and sends the explicit owner-only delivery check; it cannot target a company address. Only a successful self-test enables the database mail switch with a default limit of one campaign email per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically. `npm run gmail:disable` restores all local mail kill switches.
+See [the Gmail SMTP activation runbook](docs/runbooks/smtp-activation.md). After creating a Google app password, run `npm run gmail:setup`; its hidden prompt stores the credential only in ignored `.secrets/smtp_password` and leaves delivery disabled. `npm run gmail:status` reports state without exposing it. `npm run gmail:self-test` authenticates SMTP and sends the explicit owner-only delivery check; it cannot target a company address. Only a successful self-test enables the database mail switch with an owner-approved ceiling of 30 campaign emails per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically. `npm run gmail:disable` restores all local mail kill switches.
 
 For a clean infrastructure start, migration and HTTPS health check:
 
@@ -89,7 +89,7 @@ For a clean infrastructure start, migration and HTTPS health check:
 npm run smoke:docker
 ```
 
-This command creates development-only secret files under ignored `.secrets/` only when missing and reuses them on later runs, starts only the pinned Workoutreach Compose project, applies migrations, queries migration evidence, then removes its test containers and volumes. It never silently rotates secrets behind an existing PostgreSQL volume.
+This command creates development-only secret files under ignored `.secrets/` only when missing and reuses them on later runs, starts only the pinned Workoutreach Compose project, applies migrations, verifies a second no-op pass plus the SHA-256 migration registry, then removes its test containers and volumes. Applied migration versions are skipped; a modified historical migration or a database newer than the checkout is rejected. It never silently rotates secrets behind an existing PostgreSQL volume.
 It also proves approval replay/concurrency, suppression-at-approval, suppression-at-dispatch, mock claiming, and a business-database backup/restore into a clean temporary database.
 
 ## Local operator dashboard
@@ -100,7 +100,7 @@ Run the one-time interactive setup:
 npm run dashboard:setup
 ```
 
-Then open `https://dashboard.workoutreach.localhost`. Setup stores only a scrypt password hash plus separate DB/session Docker Secrets, provisions the least-privilege role for both clean and existing PostgreSQL volumes, applies migration 008, and starts the internal-only container. Before migrating an existing running database it writes an ignored owner-only custom-format backup without printing rows.
+Then open `https://dashboard.workoutreach.localhost`. Setup stores only a scrypt password hash plus separate DB/session Docker Secrets, provisions the least-privilege role for both clean and existing PostgreSQL volumes, applies pending versioned migrations, and starts the internal-only container. Before migration 008 is first applied to an existing running database it writes an ignored owner-only custom-format backup without printing rows.
 
 Use `npm run dashboard:start`, `npm run dashboard:status` and `npm run dashboard:stop` for normal operation. The default tab shows only «Отправлено · ждём ответа». A real send means exactly `smtp + SMTP_ACCEPTED` and is labelled «Отправлено — принято Gmail SMTP»; mock rows are labelled «Тест — email не отправлен». See [the dashboard runbook](docs/runbooks/local-operator-dashboard.md).
 

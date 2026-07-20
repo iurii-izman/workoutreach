@@ -49,4 +49,4 @@ Smoke использует только synthetic строки внутри тр
 - `VERSION_CONFLICT`: другой update уже изменил компанию; UI перечитает карточку, после проверки повторите действие.
 - `SAFE_NOTE_CONTAINS_PII`: удалите email или URL. Safe note предназначена только для короткой операционной пометки.
 - `ACCEPTED_RECIPIENT_REQUIRED`: «просьба адресата» допустима только при наличии фактически принятого SMTP-письма. Для превентивного запрета выберите «решение владельца».
-- Контейнер unhealthy: проверьте `npm run dashboard:status`, наличие трёх dashboard secret files и применение `008_local_operator_dashboard`; не выводите secret files или DB rows в консоль.
+- Контейнер unhealthy: проверьте `npm run dashboard:status`, наличие трёх dashboard secret files и применение pending migrations; не выводите secret files или DB rows в консоль. Checksum mismatch требует восстановления неизменённого migration file или перехода на checkout, соответствующий версии БД — не редактируйте применённую миграцию.
