@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { crawlSite } from './crawl.mjs';
-import { chooseContact, choosePhone, deduplicateContacts, deduplicatePhones, extractContactsFromHtml, extractPhonesFromHtml } from './contacts.mjs';
+import { chooseContact, choosePhone, deduplicateContacts, deduplicatePhones, extractContactsFromHtml, extractPhonesFromHtml, normalizeExplicitEmail } from './contacts.mjs';
 import { SafeStop } from './errors.mjs';
 import { businessGate, evidenceGate } from './gates.mjs';
 import {
@@ -50,20 +50,59 @@ export async function loadOfferProfile(root, relative = 'product/offer-profile.v
   return JSON.parse(await readFile(join(root, relative), 'utf8'));
 }
 
-export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, factModelSettings = modelSettings, phraseModelSettings = modelSettings, crawlLimits = {}, onModelEnvelope = null, beforeModelCalls = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub' }) {
+export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, offerProfile, attachment = null, modelSettings = {}, factModelSettings = modelSettings, phraseModelSettings = modelSettings, crawlLimits = {}, onModelEnvelope = null, beforeModelCalls = null, seed = inputUrl, jobId = makeJobId(seed), mode = 'offline-stub', contactSelection = null }) {
   if (!offerProfile || (!offerProfile.owner_approved && !offerProfile.synthetic_eval)) {
     throw new SafeStop('OFFER_NOT_APPROVED', 'An owner-approved or synthetic-eval offer profile is required');
   }
   if (!/^WO-[A-Z0-9]{6}$/u.test(jobId)) throw new SafeStop('JOB_ID_INVALID', 'Job identifier is outside the canonical contract');
   const crawl = await crawlSite(inputUrl, fetcher, crawlLimits);
   const contacts = deduplicateContacts(crawl.pages.flatMap((page) => extractContactsFromHtml(page._html, page)));
-  const contactDecision = chooseContact(contacts, { campaignType: offerProfile.campaign_type ?? 'general_outreach' });
-  if (contactDecision.decision === 'NEEDS_CONTACT') throw new SafeStop('NEEDS_CONTACT', 'No eligible published contact address was found');
-  if (contactDecision.decision === 'NEEDS_REVIEW') throw new SafeStop('NEEDS_REVIEW', 'Multiple or ambiguous contact addresses require operator selection');
   const phoneCandidates = deduplicatePhones(crawl.pages.flatMap((page) => extractPhonesFromHtml(page._html, page)));
   const phoneDecision = choosePhone(phoneCandidates);
-
   const pages = crawl.pages.map(({ _html, ...page }) => page);
+  let contactDecision = chooseContact(contacts, { campaignType: offerProfile.campaign_type ?? 'general_outreach' });
+
+  if (contactSelection?.type === 'published') {
+    const normalized = normalizeExplicitEmail(contactSelection.email);
+    const selected = contactDecision.candidates.find((candidate) => candidate.normalized_email === normalized && candidate.provenance === 'published' && candidate.automatic_selection_allowed);
+    if (!selected) throw new SafeStop('CONTACT_SELECTION_STALE', 'Selected published contact is no longer present on the authorized site');
+    contactDecision = { ...contactDecision, decision: 'SELECTED_FOR_REVIEW', selected, selection_method: 'operator_published' };
+  } else if (contactSelection?.type === 'manual') {
+    const email = normalizeExplicitEmail(contactSelection.email);
+    const manual = {
+      email,
+      normalized_email: email,
+      category: 'manual',
+      source_id: 'manual',
+      source_url: crawl.root,
+      source_excerpt: 'Known address supplied explicitly by the owner in Telegram.',
+      automatic_selection_allowed: false,
+      provenance: 'manual',
+    };
+    contactDecision = {
+      decision: 'SELECTED_FOR_REVIEW',
+      selected: manual,
+      candidates: [...contactDecision.candidates, manual],
+      campaign_type: offerProfile.campaign_type ?? 'general_outreach',
+      selection_method: 'operator_manual',
+    };
+  } else if (contactSelection) {
+    throw new SafeStop('CONTACT_SELECTION_INVALID', 'Unknown contact selection method');
+  }
+
+  if (['NEEDS_CONTACT', 'NEEDS_REVIEW'].includes(contactDecision.decision)) {
+    return {
+      ok: true,
+      mode,
+      job_id: jobId,
+      status: contactDecision.decision,
+      crawl: { page_count: pages.length, skipped_pages: crawl.skippedPages, total_chars: crawl.totalChars, pages },
+      contact: contactDecision,
+      phone: phoneDecision,
+      safety: { live_send_enabled: false, mail_transport: 'disabled', transmitted: false, mail_transmitted: false, telegram_preview_transmitted: false, outbox_created: false },
+    };
+  }
+
   const hostname = new URL(crawl.root).hostname;
   const contracts = await loadModelContracts(root);
   const factRequest = await buildFactRequest(root, pages, factModelSettings);

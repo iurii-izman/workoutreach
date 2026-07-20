@@ -1,5 +1,7 @@
 import pg from 'pg';
+import { randomBytes } from 'node:crypto';
 import { recipientFingerprint } from './approval.mjs';
+import { normalizeExplicitEmail } from './contacts.mjs';
 import { SafeStop } from './errors.mjs';
 import { sha256, stableJson } from './normalize.mjs';
 
@@ -46,7 +48,7 @@ export class PostgresBotStore {
   }
 
   async verifyReady() {
-    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '007_stage_3_template_sendability') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
+    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '007_stage_3_template_sendability') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '011_pilot_contact_resolution') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
     const row = result.rows[0];
     if (!row?.ready) throw new SafeStop('DATABASE_MIGRATION_MISSING', 'Local Stage-2 runtime and model-budget migrations are required');
     return true;
@@ -144,9 +146,9 @@ export class PostgresBotStore {
       }
       for (const contact of result.contact.candidates) {
         await client.query(
-          `INSERT INTO workoutreach.contact_candidates(job_id,email,normalized_email,category,source_id,source_url,source_excerpt,automatic_selection_allowed)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [result.job_id, contact.email, contact.normalized_email, contact.category, contact.source_id, contact.source_url, contact.source_excerpt, contact.automatic_selection_allowed],
+          `INSERT INTO workoutreach.contact_candidates(job_id,email,normalized_email,category,source_id,source_url,source_excerpt,automatic_selection_allowed,provenance)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [result.job_id, contact.email, contact.normalized_email, contact.category, contact.source_id, contact.source_url, contact.source_excerpt, contact.automatic_selection_allowed, contact.provenance ?? 'published'],
         );
       }
       for (const phone of result.phone.candidates ?? []) {
@@ -250,6 +252,187 @@ export class PostgresBotStore {
     }
   }
 
+  async persistContactReview(result, { userId, chatId } = {}) {
+    if (!['NEEDS_CONTACT', 'NEEDS_REVIEW'].includes(result.status)) throw new SafeStop('CONTACT_REVIEW_STATE_INVALID', 'Contact review payload has an invalid status');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const locked = await client.query('SELECT * FROM workoutreach.jobs WHERE job_id=$1 FOR UPDATE', [result.job_id]);
+      const job = locked.rows[0];
+      if (!job || String(job.telegram_user_id) !== String(userId) || String(job.telegram_chat_id) !== String(chatId) || job.status !== 'ANALYZING') {
+        throw new SafeStop('DATABASE_JOB_STATE_INVALID', 'Persisted job is not owned or not ready for contact review');
+      }
+
+      await client.query('DELETE FROM workoutreach.pages WHERE job_id=$1', [result.job_id]);
+      await client.query('DELETE FROM workoutreach.contact_candidates WHERE job_id=$1', [result.job_id]);
+      await client.query('DELETE FROM workoutreach.phone_candidates WHERE job_id=$1', [result.job_id]);
+      for (const page of result.crawl.pages) {
+        await client.query(
+          `INSERT INTO workoutreach.pages(job_id,source_id,source_url,source_type,title,content_sha256,normalized_text)
+           VALUES($1,$2,$3,$4,$5,$6,$7)`,
+          [result.job_id, page.source_id, page.source_url, page.source_type, page.title || null, page.content_sha256, page.text],
+        );
+      }
+      const candidates = [];
+      for (const contact of result.contact.candidates) {
+        const inserted = await client.query(
+          `INSERT INTO workoutreach.contact_candidates(job_id,email,normalized_email,category,source_id,source_url,source_excerpt,automatic_selection_allowed,provenance)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING id,email,category,source_url,provenance,automatic_selection_allowed`,
+          [result.job_id, contact.email, contact.normalized_email, contact.category, contact.source_id, contact.source_url, contact.source_excerpt, contact.automatic_selection_allowed, contact.provenance ?? 'published'],
+        );
+        candidates.push(inserted.rows[0]);
+      }
+      for (const phone of result.phone?.candidates ?? []) {
+        await client.query(
+          `INSERT INTO workoutreach.phone_candidates(job_id,phone,normalized_phone,source_id,source_url,source_excerpt,decision)
+           VALUES($1,$2,$3,$4,$5,$6,$7)`,
+          [result.job_id, phone.phone, phone.normalized_phone, phone.source_id, phone.source_url, phone.source_excerpt, result.phone.decision],
+        );
+      }
+
+      await client.query('UPDATE workoutreach.jobs SET status=$2,error_code=NULL WHERE job_id=$1', [result.job_id, result.status]);
+      await client.query('UPDATE workoutreach.contact_review_tokens SET invalidated_at=CURRENT_TIMESTAMP WHERE job_id=$1 AND consumed_at IS NULL AND invalidated_at IS NULL', [result.job_id]);
+      let nonce = null;
+      if (result.status === 'NEEDS_REVIEW' && candidates.length > 0) {
+        nonce = randomBytes(16).toString('base64url');
+        await client.query(
+          `INSERT INTO workoutreach.contact_review_tokens(job_id,nonce_sha256,telegram_user_id,telegram_chat_id,expires_at)
+           VALUES($1,$2,$3,$4,LEAST(CURRENT_TIMESTAMP + interval '24 hours',$5))`,
+          [result.job_id, sha256(nonce), asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id'), job.expires_at],
+        );
+      }
+      await client.query(
+        "UPDATE workoutreach.telegram_updates SET result_code=$2 WHERE job_id=$1 AND update_id=(SELECT max(update_id) FROM workoutreach.telegram_updates WHERE job_id=$1)",
+        [result.job_id, result.status],
+      );
+      await client.query('COMMIT');
+      return {
+        status: result.status,
+        candidates: candidates.map((candidate) => ({
+          ...candidate,
+          callbackData: nonce ? `contact:${result.job_id}:${candidate.id}:${nonce}` : null,
+        })),
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async selectPublishedContact({ callbackData, userId, chatId, updateId }) {
+    const parts = String(callbackData).match(/^contact:(WO-[A-Z0-9]{6}):([1-9][0-9]*):([A-Za-z0-9_-]{22,43})$/u);
+    if (!parts) return { result_code: 'CALLBACK_INVALID' };
+    const [, jobId, candidateId, nonce] = parts;
+    const actionKey = `tg:${asInteger(updateId, 'update_id')}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const jobResult = await client.query('SELECT * FROM workoutreach.jobs WHERE job_id=$1 FOR UPDATE', [jobId]);
+      const job = jobResult.rows[0];
+      if (!job || String(job.telegram_user_id) !== String(userId) || String(job.telegram_chat_id) !== String(chatId)) {
+        await client.query('ROLLBACK');
+        return { result_code: 'APPROVAL_NOT_AUTHORIZED' };
+      }
+      const replay = await client.query('SELECT result_code FROM workoutreach.operator_actions WHERE action_key=$1', [actionKey]);
+      if (replay.rowCount === 1) {
+        await client.query('COMMIT');
+        return { result_code: replay.rows[0].result_code, job_id: jobId, replay: true };
+      }
+      const tokenResult = await client.query(
+        `SELECT * FROM workoutreach.contact_review_tokens
+         WHERE job_id=$1 AND nonce_sha256=$2 FOR UPDATE`,
+        [jobId, sha256(nonce)],
+      );
+      const token = tokenResult.rows[0];
+      if (!token || String(token.telegram_user_id) !== String(userId) || String(token.telegram_chat_id) !== String(chatId)
+          || token.consumed_at || token.invalidated_at || new Date(token.expires_at) <= new Date() || job.status !== 'NEEDS_REVIEW') {
+        await client.query('ROLLBACK');
+        return { result_code: 'CONTACT_TOKEN_INVALID', job_id: jobId };
+      }
+      const candidateResult = await client.query(
+        `SELECT id,email,category,source_url,provenance FROM workoutreach.contact_candidates
+         WHERE id=$1 AND job_id=$2 AND provenance='published' AND automatic_selection_allowed=true`,
+        [asInteger(candidateId, 'candidate_id'), jobId],
+      );
+      const candidate = candidateResult.rows[0];
+      if (!candidate) {
+        await client.query('ROLLBACK');
+        return { result_code: 'CONTACT_CANDIDATE_INVALID', job_id: jobId };
+      }
+      await client.query('UPDATE workoutreach.contact_review_tokens SET consumed_at=CURRENT_TIMESTAMP WHERE id=$1', [token.id]);
+      await client.query("UPDATE workoutreach.jobs SET status='ANALYZING' WHERE job_id=$1", [jobId]);
+      await client.query(
+        `INSERT INTO workoutreach.operator_actions(action_key,job_id,action,result_code,telegram_user_id,telegram_chat_id)
+         VALUES($1,$2,'select_recipient','CONTACT_SELECTED',$3,$4)`,
+        [actionKey, jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+      );
+      await client.query(
+        `INSERT INTO workoutreach.audit_log(job_id,event_type,actor_type,safe_metadata)
+         VALUES($1,'CONTACT_SELECTED','operator',jsonb_build_object('candidate_id',$2::bigint,'provenance','published'))`,
+        [jobId, candidate.id],
+      );
+      await client.query('COMMIT');
+      return { result_code: 'CONTACT_SELECTED', job_id: jobId, canonical_url: job.canonical_url, contact: candidate, selection: { type: 'published', email: candidate.email } };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async selectManualContact({ jobId, email: rawEmail, userId, chatId, updateId }) {
+    let email;
+    try { email = normalizeExplicitEmail(rawEmail); } catch { throw new SafeStop('MANUAL_EMAIL_INVALID', 'Manual email address is invalid'); }
+    const actionKey = `tg:${asInteger(updateId, 'update_id')}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const jobResult = await client.query('SELECT * FROM workoutreach.jobs WHERE job_id=$1 FOR UPDATE', [jobId]);
+      const job = jobResult.rows[0];
+      if (!job || String(job.telegram_user_id) !== String(userId) || String(job.telegram_chat_id) !== String(chatId)) throw new SafeStop('APPROVAL_NOT_AUTHORIZED', 'Job is not owned by this operator');
+      const replay = await client.query('SELECT result_code FROM workoutreach.operator_actions WHERE action_key=$1', [actionKey]);
+      if (replay.rowCount === 1) {
+        await client.query('COMMIT');
+        return { result_code: replay.rows[0].result_code, job_id: jobId, replay: true };
+      }
+      if (!['NEEDS_CONTACT', 'NEEDS_REVIEW'].includes(job.status) || new Date(job.expires_at) <= new Date()) throw new SafeStop('MANUAL_EMAIL_STATE_INVALID', 'Manual email can only resolve an active contact review');
+      const existing = await client.query('SELECT id,email,provenance FROM workoutreach.contact_candidates WHERE job_id=$1 AND normalized_email=$2', [jobId, email]);
+      let provenance = 'manual';
+      if (existing.rowCount === 0) {
+        await client.query(
+          `INSERT INTO workoutreach.contact_candidates(job_id,email,normalized_email,category,source_id,source_url,source_excerpt,automatic_selection_allowed,provenance)
+           VALUES($1,$2,$2,'manual','manual',$3,'Known address supplied explicitly by the owner in Telegram.',false,'manual')`,
+          [jobId, email, job.canonical_url],
+        );
+      } else {
+        provenance = existing.rows[0].provenance;
+      }
+      await client.query('UPDATE workoutreach.contact_review_tokens SET invalidated_at=CURRENT_TIMESTAMP WHERE job_id=$1 AND consumed_at IS NULL AND invalidated_at IS NULL', [jobId]);
+      await client.query("UPDATE workoutreach.jobs SET status='ANALYZING' WHERE job_id=$1", [jobId]);
+      await client.query(
+        `INSERT INTO workoutreach.operator_actions(action_key,job_id,action,result_code,telegram_user_id,telegram_chat_id)
+         VALUES($1,$2,'select_recipient','MANUAL_CONTACT_SELECTED',$3,$4)`,
+        [actionKey, jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+      );
+      await client.query(
+        `INSERT INTO workoutreach.audit_log(job_id,event_type,actor_type,safe_metadata)
+         VALUES($1,'MANUAL_CONTACT_SELECTED','operator',jsonb_build_object('provenance',$2::text))`,
+        [jobId, provenance],
+      );
+      await client.query('COMMIT');
+      return { result_code: 'MANUAL_CONTACT_SELECTED', job_id: jobId, canonical_url: job.canonical_url, selection: { type: provenance === 'manual' ? 'manual' : 'published', email }, provenance };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async failJob(jobId, errorCode) {
     const client = await this.pool.connect();
     try {
@@ -327,6 +510,63 @@ export class PostgresBotStore {
       [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
     );
     return result.rows[0] ?? null;
+  }
+
+  async getQueueSummary(userId, chatId, limit = 10) {
+    const params = [asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id'), asInteger(limit, 'queue_limit')];
+    const [counts, jobs] = await Promise.all([
+      this.pool.query(
+        `SELECT status,count(*)::integer AS count
+         FROM workoutreach.jobs
+         WHERE telegram_user_id=$1 AND telegram_chat_id=$2
+           AND status IN ('NEEDS_CONTACT','NEEDS_REVIEW','DRAFT_READY','APPROVED','SENDING','FAILED')
+         GROUP BY status ORDER BY status`,
+        params.slice(0, 2),
+      ),
+      this.pool.query(
+        `SELECT job_id,hostname,status,error_code,created_at
+         FROM workoutreach.jobs
+         WHERE telegram_user_id=$1 AND telegram_chat_id=$2
+           AND status IN ('NEEDS_CONTACT','NEEDS_REVIEW','DRAFT_READY','APPROVED','SENDING','FAILED')
+         ORDER BY CASE status
+           WHEN 'NEEDS_CONTACT' THEN 1 WHEN 'NEEDS_REVIEW' THEN 2 WHEN 'DRAFT_READY' THEN 3
+           WHEN 'APPROVED' THEN 4 WHEN 'SENDING' THEN 5 ELSE 6 END, created_at
+         LIMIT $3`,
+        params,
+      ),
+    ]);
+    return { counts: counts.rows, jobs: jobs.rows };
+  }
+
+  async getNextActionable(userId, chatId) {
+    const result = await this.pool.query(
+      `SELECT job_id,hostname,canonical_url,status,error_code
+       FROM workoutreach.jobs
+       WHERE telegram_user_id=$1 AND telegram_chat_id=$2
+         AND status IN ('NEEDS_CONTACT','NEEDS_REVIEW','DRAFT_READY')
+       ORDER BY CASE status WHEN 'NEEDS_CONTACT' THEN 1 WHEN 'NEEDS_REVIEW' THEN 2 ELSE 3 END, created_at
+       LIMIT 1`,
+      [asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async getUsageSummary() {
+    const result = await this.pool.query(
+      `SELECT
+         (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date::text AS usage_date,
+         count(m.*)::integer AS analyses_reserved,
+         count(m.*) FILTER (WHERE m.status='COMPLETED')::integer AS analyses_completed,
+         count(m.*) FILTER (WHERE m.status='FAILED')::integer AS analyses_failed,
+         COALESCE(sum(COALESCE((m.usage#>>'{fact,input_tokens}')::bigint,0) + COALESCE((m.usage#>>'{phrase,input_tokens}')::bigint,0)),0)::bigint AS input_tokens,
+         COALESCE(sum(COALESCE((m.usage#>>'{fact,output_tokens}')::bigint,0) + COALESCE((m.usage#>>'{phrase,output_tokens}')::bigint,0)),0)::bigint AS output_tokens,
+         (SELECT daily_send_limit FROM workoutreach.mail_runtime_controls WHERE singleton=true)::integer AS send_limit,
+         (SELECT count(*) FROM workoutreach.outbox WHERE transport='smtp' AND created_at >= date_trunc('day',CURRENT_TIMESTAMP AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::integer AS smtp_queued,
+         (SELECT count(*) FROM workoutreach.outbox WHERE transport='smtp' AND status='SMTP_ACCEPTED' AND created_at >= date_trunc('day',CURRENT_TIMESTAMP AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::integer AS smtp_accepted
+       FROM workoutreach.model_runs m
+       WHERE m.run_date=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date`,
+    );
+    return result.rows[0];
   }
 
   async issueExistingSmtpApproval(jobId, userId, chatId) {

@@ -233,3 +233,80 @@ test('/approve explains why a legacy non-sendable draft must be recreated', asyn
   assert.equal(result.code, 'TEMPLATE_NOT_SENDABLE');
   assert.match(client.events[0].text, /Пришлите URL заново/u);
 });
+
+test('contact review shows published email category/source and does not reserve model budget', async () => {
+  const client = createFakeClient();
+  let reserved = false;
+  const stateStore = {
+    async beginJob() { return { created: true, replay: false }; },
+    async reserveAnalysis() { reserved = true; },
+    async persistContactReview() {
+      return {
+        status: 'NEEDS_REVIEW',
+        candidates: [
+          { id: 7, email: 'hr@example.com', category: 'recruiting', source_url: 'https://example.com/contacts', provenance: 'published', automatic_selection_allowed: true, callbackData: 'contact:WO-ABC234:7:abcdefghijklmnopqrstuv' },
+          { id: 8, email: 'legal@example.com', category: 'privacy_or_legal', source_url: 'https://example.com/privacy', provenance: 'published', automatic_selection_allowed: false, callbackData: 'contact:WO-ABC234:8:abcdefghijklmnopqrstuv' },
+        ],
+      };
+    },
+    async failJob() { assert.fail('contact review must not fail the job'); },
+  };
+  const handler = createTelegramBotHandler({
+    client, allowlist, stateStore,
+    analyze: async ({ jobId }) => ({ job_id: jobId, status: 'NEEDS_REVIEW' }),
+  });
+  const result = await handler.handleUpdate(messageUpdate(40, 'https://example.com/'));
+  assert.equal(result.status, 'NEEDS_REVIEW');
+  assert.equal(reserved, false);
+  const message = client.events.find((event) => event.type === 'text' && /Категория:/u.test(event.text));
+  assert.match(message.text, /hr@example\.com/u);
+  assert.match(message.text, /https:\/\/example\.com\/contacts/u);
+  assert.match(message.text, /privacy_or_legal · недоступен по политике/u);
+  assert.equal(message.options.replyMarkup.inline_keyboard.length, 1);
+  assert.equal(message.options.replyMarkup.inline_keyboard[0][0].callback_data, 'contact:WO-ABC234:7:abcdefghijklmnopqrstuv');
+});
+
+test('manual email command explicitly selects manual provenance and continues the same job', async () => {
+  const client = createFakeClient();
+  let receivedSelection;
+  const nonce = 'abcdefghijklmnopqrstuv';
+  const stateStore = {
+    mailEnabled: true,
+    async selectManualContact({ jobId, email }) {
+      assert.equal(jobId, 'WO-ABC234');
+      assert.equal(email, 'known@example.com');
+      return { result_code: 'MANUAL_CONTACT_SELECTED', job_id: jobId, canonical_url: 'https://example.com/', provenance: 'manual', selection: { type: 'manual', email } };
+    },
+    async reserveAnalysis() {},
+    async persistAnalysis(result) {
+      return { mailEnabled: true, callbacks: { send: `smtp_send:${result.job_id}:${nonce}`, regenerate: `regenerate:${result.job_id}:${nonce}`, reject: `reject:${result.job_id}:${nonce}` } };
+    },
+    async failJob() { assert.fail('manual selection flow must succeed'); },
+  };
+  const handler = createTelegramBotHandler({
+    client, allowlist, stateStore,
+    analyze: async ({ jobId, contactSelection, beforeModelCalls }) => {
+      receivedSelection = contactSelection;
+      await beforeModelCalls();
+      return { job_id: jobId, status: 'DRAFT_READY', telegram_preview: { text: 'preview', reply_markup: {} } };
+    },
+  });
+  const result = await handler.handleUpdate(messageUpdate(41, '/email WO-ABC234 known@example.com'));
+  assert.equal(result.status, 'DRAFT_READY');
+  assert.deepEqual(receivedSelection, { type: 'manual', email: 'known@example.com' });
+  assert.match(client.events[0].text, /помечен: manual/u);
+});
+
+test('/queue, /next and /usage read operational state without analysis', async () => {
+  const client = createFakeClient();
+  const stateStore = {
+    async getQueueSummary() { return { counts: [{ status: 'DRAFT_READY', count: 1 }], jobs: [{ job_id: 'WO-ABC234', hostname: 'example.com', status: 'DRAFT_READY', error_code: null }] }; },
+    async getNextActionable() { return { job_id: 'WO-ABC234', hostname: 'example.com', status: 'DRAFT_READY' }; },
+    async getUsageSummary() { return { usage_date: '2026-07-20', analyses_completed: 2, analyses_reserved: 2, analyses_failed: 0, input_tokens: 10, output_tokens: 5, smtp_accepted: 1, smtp_queued: 1, send_limit: 30 }; },
+  };
+  const handler = createTelegramBotHandler({ client, allowlist, stateStore, dailyAnalysisLimit: 40, analyze: async () => assert.fail('analysis must not run') });
+  assert.equal((await handler.handleUpdate(messageUpdate(42, '/queue'))).action, 'queue');
+  assert.equal((await handler.handleUpdate(messageUpdate(43, '/next'))).jobId, 'WO-ABC234');
+  assert.equal((await handler.handleUpdate(messageUpdate(44, '/usage'))).action, 'usage');
+  assert.ok(client.events.some((event) => /SMTP: 1 принято/u.test(event.text)));
+});

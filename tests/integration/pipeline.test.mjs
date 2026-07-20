@@ -54,3 +54,43 @@ test('compact evidence prefers a nearby sentence boundary before the fact', () =
   const excerpt = compactEvidenceExcerpt(`${'далёкий контекст '.repeat(20)}Завершённая мысль! Важный контекст. ${fact} ${'хвост '.repeat(50)}`, fact, 180);
   assert.match(excerpt, /^Важный контекст\. Настраиваем Битрикс24 под ключ\./u);
 });
+
+test('ambiguous published contacts stop before model budget reservation and expose sourced candidates', async () => {
+  let modelCalls = 0;
+  let reservations = 0;
+  const fetcher = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/robots.txt') return { url, contentType: 'text/plain', body: '', bytes: 0 };
+    const body = '<html><head><title>Контакт Тест</title></head><body><a href="mailto:hr@contact-test.example">HR</a><a href="mailto:jobs@contact-test.example">Jobs</a></body></html>';
+    return { url, contentType: 'text/html', body, bytes: Buffer.byteLength(body) };
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://contact-test.example/',
+    fetcher,
+    modelAdapter: { async fact() { modelCalls += 1; }, async phrase() { modelCalls += 1; } },
+    offerProfile: await loadOfferProfile(root),
+    beforeModelCalls: async () => { reservations += 1; },
+  });
+  assert.equal(result.status, 'NEEDS_REVIEW');
+  assert.equal(result.contact.candidates.length, 2);
+  assert.ok(result.contact.candidates.every((candidate) => candidate.provenance === 'published' && candidate.source_url === 'https://contact-test.example/'));
+  assert.equal(modelCalls, 0);
+  assert.equal(reservations, 0);
+});
+
+test('explicit manual contact is labelled manual and remains outside model requests', async () => {
+  const model = await createModelStub(root, 'synthetic-company');
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter: model,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    contactSelection: { type: 'manual', email: ' Known.Contact@Example.com ' },
+  });
+  assert.equal(result.status, 'DRAFT_READY');
+  assert.equal(result.contact.selected.email, 'known.contact@example.com');
+  assert.equal(result.contact.selected.category, 'manual');
+  assert.equal(result.contact.selected.provenance, 'manual');
+});

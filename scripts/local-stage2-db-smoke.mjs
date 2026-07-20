@@ -7,6 +7,8 @@ import pg from 'pg';
 const { Pool } = pg;
 const root = new URL('../', import.meta.url).pathname;
 const jobId = 'WO-LOC201';
+const contactJobId = 'WO-CNT201';
+const manualJobId = 'WO-MAN201';
 const userId = '91001';
 const chatId = '92002';
 const suppressionHmacKey = (await readFile('/run/secrets/suppression_hmac_key', 'utf8')).trim();
@@ -20,10 +22,12 @@ function pool() {
 }
 
 async function cleanup(activePool) {
-  await activePool.query('DELETE FROM workoutreach.message_events WHERE job_id=$1', [jobId]);
-  await activePool.query('DELETE FROM workoutreach.outbox WHERE job_id=$1', [jobId]);
-  await activePool.query('DELETE FROM workoutreach.operator_actions WHERE job_id=$1', [jobId]);
-  await activePool.query('DELETE FROM workoutreach.jobs WHERE job_id=$1', [jobId]);
+  for (const id of [jobId, contactJobId, manualJobId]) {
+    await activePool.query('DELETE FROM workoutreach.message_events WHERE job_id=$1', [id]);
+    await activePool.query('DELETE FROM workoutreach.outbox WHERE job_id=$1', [id]);
+    await activePool.query('DELETE FROM workoutreach.operator_actions WHERE job_id=$1', [id]);
+    await activePool.query('DELETE FROM workoutreach.jobs WHERE job_id=$1', [id]);
+  }
 }
 
 let firstPool = pool();
@@ -80,10 +84,68 @@ try {
   const row = counts.rows[0];
   if (row.drafts !== 2 || row.analyses !== 6 || row.outbox !== 1 || row.status !== 'APPROVED') throw new Error('Persisted local runtime counts are invalid');
 
+  await store.beginJob({ updateId: 920010, jobId: contactJobId, inputUrl: 'https://synthetic-company.example/', userId, chatId });
+  const fixtureFetcher = await createFixtureFetcher(root, 'synthetic-company');
+  const ambiguousFetcher = async (url) => {
+    const response = await fixtureFetcher(url);
+    if (new URL(url).pathname !== '/contacts') return response;
+    const body = response.body.replace('</body>', '<a href="mailto:info@synthetic-company.example">Info</a></body>');
+    return { ...response, body, bytes: Buffer.byteLength(body) };
+  };
+  const review = await analyzeDryRun({
+    root, inputUrl: 'https://synthetic-company.example/', fetcher: ambiguousFetcher,
+    modelAdapter: await createModelStub(root, 'synthetic-company'), offerProfile, jobId: contactJobId,
+  });
+  if (review.status !== 'NEEDS_REVIEW') throw new Error('Ambiguous contact did not stop before model analysis');
+  const persistedReview = await store.persistContactReview(review, { userId, chatId });
+  const selectedCandidate = persistedReview.candidates.find((candidate) => candidate.email === 'info@synthetic-company.example');
+  if (!selectedCandidate?.callbackData?.startsWith(`contact:${contactJobId}:`)) throw new Error('Contact review callback was not issued');
+  const selectedContact = await store.selectPublishedContact({ callbackData: selectedCandidate.callbackData, userId, chatId, updateId: 920011 });
+  if (selectedContact.result_code !== 'CONTACT_SELECTED' || selectedContact.selection?.type !== 'published') throw new Error('Published contact selection failed');
+  await store.reserveAnalysis(contactJobId, 1, 5);
+  const selectedDraft = await analyzeDryRun({
+    root, inputUrl: selectedContact.canonical_url, fetcher: ambiguousFetcher,
+    modelAdapter: await createModelStub(root, 'synthetic-company'), offerProfile, jobId: contactJobId,
+    contactSelection: selectedContact.selection,
+  });
+  await store.persistAnalysis(selectedDraft, { draftVersion: 1, userId, chatId });
+  const contactState = await store.getAuthorizedJob(contactJobId, userId, chatId);
+  if (contactState?.status !== 'DRAFT_READY') throw new Error('Selected contact did not continue to a persisted draft');
+
+  await store.beginJob({ updateId: 920020, jobId: manualJobId, inputUrl: 'https://synthetic-company.example/', userId, chatId });
+  const noContactFetcher = async (url) => {
+    const response = await fixtureFetcher(url);
+    if (!String(response.contentType).startsWith('text/html')) return response;
+    const body = response.body.replaceAll('hello@synthetic-company.example', 'contact-form');
+    return { ...response, body, bytes: Buffer.byteLength(body) };
+  };
+  const noContact = await analyzeDryRun({
+    root, inputUrl: 'https://synthetic-company.example/', fetcher: noContactFetcher,
+    modelAdapter: await createModelStub(root, 'synthetic-company'), offerProfile, jobId: manualJobId,
+  });
+  if (noContact.status !== 'NEEDS_CONTACT') throw new Error('Missing contact did not stop before model analysis');
+  await store.persistContactReview(noContact, { userId, chatId });
+  const manual = await store.selectManualContact({ jobId: manualJobId, email: 'known@manual.example', userId, chatId, updateId: 920021 });
+  if (manual.provenance !== 'manual' || manual.selection?.type !== 'manual') throw new Error('Manual contact provenance was not explicit');
+  await store.reserveAnalysis(manualJobId, 1, 5);
+  const manualDraft = await analyzeDryRun({
+    root, inputUrl: manual.canonical_url, fetcher: noContactFetcher,
+    modelAdapter: await createModelStub(root, 'synthetic-company'), offerProfile, jobId: manualJobId,
+    contactSelection: manual.selection,
+  });
+  await store.persistAnalysis(manualDraft, { draftVersion: 1, userId, chatId });
+  const manualState = await secondPool.query(
+    `SELECT j.status,c.category,c.provenance FROM workoutreach.jobs j
+     JOIN workoutreach.contact_candidates c ON c.job_id=j.job_id AND c.normalized_email='known@manual.example'
+     WHERE j.job_id=$1`, [manualJobId],
+  );
+  if (manualState.rows[0]?.status !== 'DRAFT_READY' || manualState.rows[0]?.category !== 'manual' || manualState.rows[0]?.provenance !== 'manual') throw new Error('Manual contact was not persisted as manual');
+
   console.log(JSON.stringify({
     gate: 'local-stage2-db-smoke', ok: true, restart_recovery: true,
     draft_versions: row.drafts, immutable_analysis_rows: row.analyses,
     replay_outbox_rows: row.outbox, final_job_status: row.status,
+    contact_review: { pre_model_stop: true, hashed_callback: true, published_selection: true, manual_provenance: true, final_status: contactState.status },
     openai_calls: 0, telegram_calls: 0, mail_transmitted: false,
   }, null, 2));
 } finally {

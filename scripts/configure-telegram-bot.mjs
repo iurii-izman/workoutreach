@@ -3,18 +3,20 @@ import { createTelegramClient, parseIdAllowlist } from '../n8n/code/lib/telegram
 
 const commands = [
   { command: 'start', description: 'Начать работу' },
+  { command: 'next', description: 'Следующее требующее решения задание' },
+  { command: 'queue', description: 'Очередь заданий по статусам' },
+  { command: 'usage', description: 'Анализы, токены и SMTP за сегодня' },
+  { command: 'email', description: 'Указать известный email для задания' },
+  { command: 'approve', description: 'Повторно открыть подтверждение draft' },
   { command: 'help', description: 'Как пользоваться ботом' },
-  { command: 'status', description: 'Статус и безопасность' },
+  { command: 'status', description: 'Статус runtime или задания' },
   { command: 'version', description: 'Версия рабочего контура' },
 ];
 const name = 'Workoutreach · Bitrix24';
-const description = 'Пришлите публичный URL сайта компании. Я найду опубликованный контакт, проверяемый факт и подготовлю персонализированный карьерный email для ручной проверки. Email-отправка на текущем этапе отключена.';
+const description = 'Пришлите публичный URL сайта компании. Я найду опубликованные контакты и проверяемый факт, подготовлю персонализированный карьерный email и попрошу явное подтверждение перед отправкой.';
 const shortDescription = 'Проверяемый карьерный outreach для интеграторов Bitrix24 — только с human review.';
 
 try {
-  if ((process.env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled' || process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true') {
-    throw new SafeStop('LIVE_SEND_BLOCKED', 'Bot profile cannot be configured while mail sending is enabled');
-  }
   const allowedChatIds = parseIdAllowlist(process.env.ALLOWED_TELEGRAM_CHAT_IDS);
   const client = createTelegramClient({ botToken: process.env.TELEGRAM_BOT_TOKEN, allowedChatIds });
   const webhook = await client.call('getWebhookInfo');
@@ -47,7 +49,7 @@ try {
       menu_button: menuButton.type,
     },
     mode: 'allowlisted-long-polling',
-    mail_transport: 'disabled',
+    mail_transport: (process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true' && process.env.MAIL_TRANSPORT === 'smtp') ? 'smtp' : 'disabled',
   }, null, 2));
 } catch (error) {
   console.error(JSON.stringify(asSafeResult(error), null, 2));

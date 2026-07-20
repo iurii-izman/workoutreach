@@ -1,6 +1,6 @@
 # Workoutreach — техническое задание
 
-> Статус: Final v1.3 — owner capacity + immutable migrations
+> Статус: Final v1.4 — pilot contact resolution + hybrid local runtime
 > Дата: 20 июля 2026 года
 > Целевой каталог: `C:\Dev\workoutreach`  
 > Назначение: единый источник требований для реализации самостоятельного продукта в новом проекте и новом чате Codex.  
@@ -54,14 +54,15 @@
 - публичный job ID: префикс `WO-`;
 - новые database roles, schemas, volumes, networks и secrets получают только project-owned имена без legacy namespace.
 
-Базовый стек:
+Фактический базовый стек:
 
-- Telegram Bot API — ввод URL, предпросмотр, подтверждение и статусы;
-- n8n self-hosted в Docker — оркестрация;
-- PostgreSQL — единственный источник бизнес-состояния;
-- OpenAI Responses API через штатную OpenAI-ноду n8n — анализ и строго структурированный ответ;
-- корпоративный почтовый ящик через OAuth — отправка после подтверждения человеком;
-- reverse proxy с HTTPS — единственная публичная точка входа.
+- Telegram Bot API `getUpdates` — локальный allowlisted ввод URL, выбор контакта, предпросмотр, подтверждение и статусы;
+- отдельный hardened Node.js service — текущий critical path: crawl, deterministic gates, OpenAI Responses API, Telegram и SMTP dispatcher;
+- PostgreSQL — единственный источник бизнес-состояния, очереди и идемпотентности;
+- OpenAI Responses API — два прямых server-side вызова со strict Structured Outputs, `store=false`, без tools;
+- Gmail authenticated SMTP submission — текущий owner-approved transport после ручного подтверждения; пароль приложения только в Docker Secret;
+- n8n self-hosted — локальный визуальный и будущий orchestration layer; импортированные workflow-контракты неактивны и не дублируют отправку;
+- Caddy — loopback-only HTTPS для n8n/dashboard; публичная точка входа в локальном режиме отсутствует.
 
 ## 3. Цель продукта
 
@@ -181,10 +182,12 @@ URL
 ```mermaid
 flowchart LR
     U["Разрешённый оператор"] --> TG["Telegram test/prod bot"]
-    TG --> IN["n8n: ingest и allowlist"]
-    IN --> PG["PostgreSQL: бизнес-состояние"]
+    TG --> IN["Node.js bot: long polling + allowlist"]
+    IN --> PG["PostgreSQL: state + contact review + outbox"]
     IN --> F["Безопасная загрузка сайта"]
     F --> X["Очистка текста и извлечение контактов"]
+    X --> CR["Выбор published / явный manual"]
+    CR --> X
     X --> A1["OpenAI: выбор факта по JSON Schema"]
     A1 --> G1["Evidence gate"]
     G1 --> A2["OpenAI: персональная фраза по JSON Schema"]
@@ -193,10 +196,12 @@ flowchart LR
     T --> TG
     TG --> AP["Одноразовое подтверждение"]
     AP --> O["Transactional outbox"]
-    O --> M["Корпоративный mailbox через OAuth"]
+    O --> M["Gmail SMTP через Docker Secret"]
     M --> E["События провайдера / ответы"]
     E --> PG
     PG --> TG
+    N8N["n8n: inactive workflow contracts / future orchestration"] -.-> PG
+    PG --> D["Локальный read-mostly dashboard"]
 ```
 
 Принцип разделения полномочий:
@@ -208,11 +213,13 @@ flowchart LR
 - письмо собирает фиксированный шаблонизатор;
 - отправку разрешает только оператор и атомарный state transition.
 
-## 7. n8n workflow
+## 7. Runtime и n8n workflow-контракты
 
-Workflow должны быть небольшими, именованными и экспортируемыми в Git без credentials и runtime-данных.
+Фактический локальный critical path выполняет отдельный тестируемый Node.js service. Это уменьшает количество привилегированных компонентов, позволяет применять DNS/redirect SSRF-gates до каждого запроса и не создаёт второй send path. n8n остаётся установленным локальным визуальным orchestration layer. Его exports должны быть небольшими, именованными, credential-free и неактивными до отдельного ADR о переводе конкретной ответственности.
 
-### `01_telegram_ingest`
+Запрещено поддерживать параллельные активные реализации одной отправки в Node.js и n8n. PostgreSQL остаётся общей точкой истины при любом будущем переносе.
+
+### `01_telegram_ingest` — неактивный контракт
 
 - Telegram Trigger: `message` и `callback_query`;
 - проверка `user_id` и `chat_id` по allowlist;
@@ -222,7 +229,7 @@ Workflow должны быть небольшими, именованными и
 - вызов `02_analyze_company`;
 - быстрый ответ на callback через `answerCallbackQuery`.
 
-### `02_analyze_company`
+### `02_analyze_company` — неактивный контракт
 
 - нормализация и security gate URL;
 - ограниченная загрузка страниц;
@@ -235,30 +242,30 @@ Workflow должны быть небольшими, именованными и
 - создание версии черновика;
 - вызов `03_render_review`.
 
-### `03_render_review`
+### `03_render_review` — неактивный контракт
 
 - сборка темы, plain-text и HTML из фиксированных шаблонов;
 - экранирование динамических значений;
 - сохранение immutable draft version;
 - отправка/обновление Telegram-предпросмотра.
 
-### `04_telegram_actions`
+### `04_telegram_actions` — неактивный контракт
 
 - проверка allowlist, action nonce, TTL и состояния задания;
 - `send`, `regenerate`, `reject`, `select_recipient`;
 - атомарное создание outbox при `send`;
 - идемпотентный ответ на повторный callback.
 
-### `05_email_dispatch`
+### `05_mock_dispatch` — неактивный контракт
 
 - Schedule Trigger с малым интервалом;
 - claim одной `pending` outbox-записи через блокировку;
 - повторная проверка suppression непосредственно перед отправкой;
-- отправка через выбранный mailbox adapter;
+- только mock-dispatch; реальный Gmail SMTP dispatcher находится в Node.js service;
 - сохранение provider message ID и результата;
 - запрет слепого повтора при неоднозначном timeout.
 
-### `06_mail_events`
+### `06_mail_events` — не реализован
 
 - webhook или безопасный polling, если это поддерживает выбранный провайдер;
 - проверка подписи webhook по raw body;
@@ -266,7 +273,7 @@ Workflow должны быть небольшими, именованными и
 - нормализация `mx_accepted`, `bounced`, `complained`, `unsubscribed`, `replied`;
 - обновление suppression и Telegram-статуса.
 
-### `90_error_handler`
+### `90_error_handler` — неактивный контракт
 
 - единый Error Trigger;
 - сохранение безопасного error code и этапа;
@@ -332,6 +339,9 @@ Email извлекаются до AI-вызовов:
 - `privacy_or_legal`;
 - `personal_named`;
 - `unknown`.
+- `manual` — только для адреса, явно введённого владельцем; для опубликованного extraction не назначается.
+
+Отдельное поле provenance принимает `published` или `manual`. Оно не выводится моделью и не может быть повышено из `manual` в `published` без повторного literal extraction.
 
 Выбор адреса зависит от назначения кампании. `recruiting`, `support`, `privacy_or_legal` автоматически не выбираются для sales/outreach. Если подходящий адрес один, он предлагается оператору; если несколько или категория `unknown`, требуется ручной выбор.
 
@@ -341,7 +351,7 @@ Email извлекаются до AI-вызовов:
 
 ### 10.1. API и модель
 
-- использовать OpenAI Responses API через операцию n8n `Generate a Model Response`;
+- использовать OpenAI Responses API из server-side Node.js adapter; будущий перенос в n8n допускается только при сохранении тех же canonical schemas и gates;
 - использовать `Output Format: JSON Schema` / Structured Outputs;
 - `Store=false`;
 - не использовать AI Agent, web search, function calling и иные tools;
@@ -473,10 +483,17 @@ product/offer-profile.v1.yaml
 Команды MVP:
 
 - сообщение с URL — создать задание;
-- `/status <job_id>` — безопасный статус;
-- `/cancel <job_id>` — отмена до отправки;
-- `/refresh <job_id>` — новый анализ без использования кэша;
+- `/status [job_id]` — безопасный статус runtime или задания;
+- `/next` — следующее задание, требующее решения оператора;
+- `/queue` — ограниченный список actionable заданий с агрегатами по статусам;
+- `/usage` — UTC-day counters анализов, токенов и SMTP acceptance без приблизительной стоимости;
+- `/email <job_id> <address>` — явный ввод достоверно известного адреса с provenance `manual`;
+- `/approve <job_id>` — новый одноразовый SMTP callback для уже проверенного immutable draft;
 - `/help` — краткая инструкция.
+
+Если найдено несколько допустимых опубликованных email, модель ещё не вызывается. Кандидаты, категория и источник сохраняются в PostgreSQL и показываются оператору; защищённые категории могут быть видимы для контекста, но не получают кнопку выбора. Callback содержит только `job_id`, database candidate ID и одноразовый nonce; nonce хранится как SHA-256, ограничен TTL и погашается атомарно. После выбора сайт загружается повторно, а опубликованный адрес обязан снова встретиться буквально и оставаться разрешённым contact-policy, иначе результат `CONTACT_SELECTION_STALE`.
+
+Ручной адрес никогда не угадывается и принимается только явной командой владельца для активного `NEEDS_CONTACT`/`NEEDS_REVIEW`. Он сохраняется с `category=manual`, `provenance=manual`, видимо маркируется в Telegram/audit и не передаётся модели.
 
 ## 15. Состояния и точная терминология
 
@@ -524,10 +541,11 @@ PostgreSQL — источник истины; n8n execution history не исп�
 - `jobs` — URL, operator, status, timestamps, error code;
 - `telegram_updates` — уникальный `update_id` и результат обработки;
 - `pages` — source metadata, content hash, краткий очищенный текст или ссылка на временное хранение;
-- `contact_candidates` — email, category, source, validation flags;
+- `contact_candidates` — email, category, source, validation flags и `published|manual` provenance;
 - `analyses` — immutable model/prompt/schema/offer versions и результат;
 - `drafts` — immutable version, subject, text, html, template hash;
 - `approval_tokens` — hashed nonce, operator, TTL, consumed_at;
+- `contact_review_tokens` — отдельный hashed nonce для выбора опубликованного кандидата до создания draft;
 - `outbox` — уникальная команда отправки и её состояние;
 - `message_events` — нормализованные provider events;
 - `suppression` — recipient HMAC, reason и дата;
@@ -609,7 +627,7 @@ Public email не равен согласию. До live pilot владелец 
 - только низкообъёмная персональная 1:1 отправка;
 - обязательное human approval каждого письма;
 - постепенный pilot остаётся внутренней рекомендацией; owner-approved техническая ёмкость ограничена максимумом 30 писем в UTC-день и не является гарантией провайдера;
-- действующий корпоративный mailbox через OAuth;
+- текущий Gmail mailbox через authenticated SMTP submission с TLS и отдельным app password в Docker Secret; OAuth остаётся допустимым будущим усилением;
 - выбранный провайдер должен разрешать конкретный тип отправки по своим условиям;
 - никакого tracking pixel и скрытого click tracking;
 - честные `From`, `Reply-To` и subject, без ложных `Re:`/`Fwd:`;

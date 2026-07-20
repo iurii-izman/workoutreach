@@ -26,6 +26,12 @@ function validEmail(email) {
   return email.length <= 254 && EMAIL_EXACT_PATTERN.test(email) && !email.includes('..') && !email.startsWith('.') && !email.endsWith('.');
 }
 
+export function normalizeExplicitEmail(value) {
+  const email = String(value ?? '').normalize('NFKC').trim().toLowerCase();
+  if (!validEmail(email)) throw new TypeError('Email address is invalid');
+  return email;
+}
+
 export function extractContactsFromHtml(html, page) {
   const $ = cheerio.load(html);
   $('script,style,noscript,template,svg,canvas,form').remove();
@@ -56,6 +62,7 @@ export function extractContactsFromHtml(html, page) {
       source_url: page.source_url,
       source_excerpt: normalizeWhitespace(excerpt),
       automatic_selection_allowed: false,
+      provenance: 'published',
     });
   }
   return [...unique.values()];

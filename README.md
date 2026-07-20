@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach prototype for Bitrix24 integrators. Stages 0–2 provide a reproducible bootstrap, deterministic offline dry-run and a local PostgreSQL-backed Telegram review workflow. A guarded single-owner Gmail SMTP adapter is implemented but remains disabled until the owner locally supplies and verifies a Google app password.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach product for Bitrix24 integrators. Its current local runtime is a hardened Node.js Telegram long-polling service backed by PostgreSQL; it performs the crawl, two-stage OpenAI analysis, evidence gates, draft review and guarded Gmail SMTP dispatch. n8n is installed as an optional visual orchestration layer with six inactive credential-free workflow contracts, but it is not a second sender and is not on the current critical path.
 
 The project also includes a local read-mostly operator dashboard. It is deliberately not a CRM or a send channel: it shows company-level delivery/engagement state and permits only guarded manual engagement updates.
 
@@ -10,11 +10,11 @@ The project also includes a local read-mostly operator dashboard. It is delibera
 
 - OpenAI: deterministic stub in CI/default dry-run; an explicit `live:preview` uses the Responses API with strict Structured Outputs, `store=false` and no tools.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
-- Mail: guarded Gmail SMTP adapter and at-most-once queue implemented; disabled by default, with no password in `.env` or Git.
+- Mail: guarded Gmail SMTP adapter and at-most-once queue implemented. The repository/CI default is disabled; the owner runtime may enable it only after the owner-only self-test. The app password exists only as a Docker Secret, never in `.env` or Git.
 - Template and candidate profile: owner-approved and versioned; only company name and personalization phrase are dynamic. Template eligibility alone cannot enable the disabled-by-default transport.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
-- Model budget: at most two analyses per UTC day by default; each analysis reserves exactly two Structured Output calls before network access.
+- Model budget: owner-approved ceiling `DAILY_ANALYSIS_LIMIT=40` analyses per UTC day; each analysis atomically reserves exactly two Structured Output calls immediately before network access. Contact-only stops consume zero model calls.
 
 ## Prerequisites
 
@@ -63,7 +63,14 @@ npm run local:start
 npm run local:status
 ```
 
-The bot answers `/start`, `/help`, `/status`, `/version`, accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. `Перегенерировать` is limited to two explicit attempts, `Отклонить` closes the review, and `Отправить (mock)` creates exactly one local outbox row while explicitly reporting that no email was sent.
+The bot accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. When several published emails are found, Telegram shows each category and source URL and requires an owner selection backed by a hashed one-time token. A known address can be supplied only through `/email WO-XXXXXX name@example.com`; it is stored with explicit `manual` provenance and is never sent to the model. `Перегенерировать` is limited to two explicit attempts, while every real send requires a separate one-time approval.
+
+Operational commands:
+
+- `/next` — oldest job requiring contact selection or draft review;
+- `/queue` — bounded actionable queue grouped by state;
+- `/usage` — current UTC-day analyses, tokens and SMTP acceptance counters;
+- `/status [WO-XXXXXX]`, `/approve WO-XXXXXX`, `/email WO-XXXXXX address`, `/help`, `/version`.
 
 Use `npm run local:stop` to stop containers without deleting their named volumes. Docker Desktop must be running; enable its own “Start Docker Desktop when you sign in” option if the bot should recover automatically after Windows login. Container restart policy is `unless-stopped`. See [the local Stage-2 runbook](docs/runbooks/local-stage2.md).
 
@@ -81,7 +88,7 @@ The bounded reader respects `robots.txt`, accepts only canonical Kazakhstan part
 
 ## Activate the selected Gmail mailbox
 
-See [the Gmail SMTP activation runbook](docs/runbooks/smtp-activation.md). After creating a Google app password, run `npm run gmail:setup`; its hidden prompt stores the credential only in ignored `.secrets/smtp_password` and leaves delivery disabled. `npm run gmail:status` reports state without exposing it. `npm run gmail:self-test` authenticates SMTP and sends the explicit owner-only delivery check; it cannot target a company address. Only a successful self-test enables the database mail switch with an owner-approved ceiling of 30 campaign emails per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically. `npm run gmail:disable` restores all local mail kill switches.
+See [the Gmail SMTP activation runbook](docs/runbooks/smtp-activation.md). After creating a Google app password, run `npm run gmail:setup`; its hidden prompt stores the credential only in ignored `.secrets/smtp_password`. `npm run gmail:status` reports state without exposing it. `npm run gmail:self-test` authenticates SMTP and sends the explicit owner-only delivery check; it cannot target a company address. Only a successful self-test enables the database mail switch with an owner-approved ceiling of 30 campaign emails per UTC day. Each Telegram click creates one immutable queue command; ambiguous failures are never retried automatically. `npm run gmail:disable` restores all local mail kill switches.
 
 For a clean infrastructure start, migration and HTTPS health check:
 
@@ -135,11 +142,13 @@ npm run smoke:clean-clone
 - PostgreSQL-backed allowlisted Telegram long polling with update deduplication and restart recovery;
 - immutable page/contact/analysis/draft persistence and one-time mock-send/regenerate/reject callbacks;
 - database-atomic daily model-analysis reservation before any OpenAI request.
+- durable pre-model contact review with published-source selection and explicit manual provenance;
+- PostgreSQL-backed `/next`, `/queue` and `/usage` operator commands.
 
 ## Intentionally blocked
 
 Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. SMTP remains disabled until the owner explicitly runs the local Gmail setup with a dedicated app password. The first delivery must target an owner-controlled address; provider-policy confirmation and reply/bounce ingestion remain Stage 3 gates.
 
-The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local Stage 2 deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment.
+The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local runtime deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment. Reply/bounce/complaint ingestion remains a pilot gate, so volume should ramp gradually even though the hard SMTP ceiling is 30/day.
 
 Tracked workflow exports intentionally contain no n8n instance IDs. `scripts/prepare-workflow-import.mjs` creates ignored deterministic import copies because the pinned n8n CLI requires a workflow ID at database import time.

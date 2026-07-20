@@ -11,14 +11,14 @@ export const BOT_COPY = Object.freeze({
 
 const STAGE2_COPY = Object.freeze({
   start: 'Добрый день! Я готовлю проверяемые персонализированные письма для карьерного обращения к интеграторам Bitrix24.\n\nПришлите одним сообщением только публичный URL сайта компании. Задание, evidence, черновик и действия сохраняются в локальном PostgreSQL и переживают перезапуск.\n\nEmail-отправка физически отключена: «Отправить» создаёт только локальную mock-запись.',
-  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. Дождитесь preview и проверьте все данные.\n3. «Перегенерировать» создаёт новую неизменяемую версию (максимум две).\n4. «Отклонить» закрывает задание.\n5. «Отправить» создаёт только mock-outbox: email не передаётся наружу.\n\nКоманды: /status или /status WO-XXXXXX, /help, /version.',
+  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. При нескольких email выберите опубликованный адрес кнопкой; известный адрес: /email WO-XXXXXX name@example.com.\n3. Проверьте preview. «Перегенерировать» создаёт новую immutable-версию (максимум две).\n4. «Отправить» создаёт только mock-outbox: email не передаётся наружу.\n\nКоманды: /next, /queue, /usage, /status [WO-XXXXXX], /help, /version.',
   status: 'Статус: локальный Stage 2 активен.\nOpenAI: guarded live evaluation только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: ОТКЛЮЧЁН.\nOutbox: только mock.\nПубличный сервер и webhook: отсутствуют.',
   version: 'Workoutreach local stage 2 · PostgreSQL-backed review · mock outbox · email disabled',
 });
 
 const SMTP_COPY = Object.freeze({
   start: 'Добрый день! Пришлите одним сообщением публичный URL сайта компании. Я сохраню evidence и черновик в локальном PostgreSQL. После полного preview кнопка «Отправить email» потребует одно явное подтверждение.',
-  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Проверьте адресата, источник, персональную фразу и полный текст.\n3. «Отправить email» создаёт одну локальную команду и отправляет письмо через настроенный SMTP.\n4. Автоматического retry после неизвестного результата нет.\n5. «Перегенерировать» доступно не более двух раз.\n\nКоманды: /status или /status WO-XXXXXX, /help, /version.',
+  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Если найдено несколько email — выберите опубликованный адрес кнопкой.\n3. Известный адрес можно указать явно: /email WO-XXXXXX name@example.com. Он будет помечен manual.\n4. Проверьте evidence и полный текст, затем подтвердите отправку.\n5. Автоматического retry после неизвестного результата нет.\n\nКоманды: /next, /queue, /usage, /status [WO-XXXXXX], /approve WO-XXXXXX, /help, /version.',
   status: 'Статус: локальная отправка включена.\nOpenAI: только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: SMTP с ручным подтверждением.\nАвтоповтор: отключён.\nПубличный webhook: отсутствует.',
   version: 'Workoutreach guarded SMTP · PostgreSQL-backed review · human approval',
 });
@@ -55,6 +55,9 @@ function friendlyFailure(error) {
     MODEL_REFUSAL: 'Модель отказалась обработать этот материал.',
     DAILY_ANALYSIS_LIMIT: 'Достигнута настроенная дневная ёмкость анализа. Незавершённые попытки тоже учитываются; новые задания станут доступны после 00:00 UTC.',
     TEMPLATE_NOT_SENDABLE: 'Этот черновик создан до активации проверенного шаблона. Пришлите URL заново, чтобы создать новую безопасную версию.',
+    MANUAL_EMAIL_INVALID: 'Ручной адрес не прошёл синтаксическую проверку. Используйте полный адрес вида name@example.com.',
+    MANUAL_EMAIL_STATE_INVALID: 'Ручной адрес можно добавить только к активному заданию со статусом NEEDS_CONTACT или NEEDS_REVIEW.',
+    CONTACT_SELECTION_STALE: 'Опубликованный адрес не подтвердился при повторной загрузке сайта. Выберите адрес заново.',
   };
   return `Задание безопасно остановлено.\nКод: ${result.code}\n${messages[result.code] ?? 'Проверьте URL или повторите попытку позже.'}`;
 }
@@ -86,6 +89,44 @@ function stage2Preview(preview, callbacks, mailEnabled = false) {
   };
 }
 
+function contactReviewMessage(jobId, review) {
+  if (review.status === 'NEEDS_CONTACT') {
+    return {
+      text: `#${jobId}\nНа сайте не найден подходящий опубликованный email. Ничего не угадано.\n\nЕсли адрес вам достоверно известен, укажите его явно:\n/email ${jobId} name@example.com\n\nТакой источник будет помечен manual.`,
+      replyMarkup: null,
+    };
+  }
+  const visible = [...review.candidates.filter((candidate) => candidate.automatic_selection_allowed), ...review.candidates.filter((candidate) => !candidate.automatic_selection_allowed)].slice(0, 25);
+  const lines = visible.map((candidate, index) => `${index + 1}. ${candidate.email}\nКатегория: ${candidate.category}${candidate.automatic_selection_allowed ? '' : ' · недоступен по политике'}\nИсточник: ${candidate.source_url}`);
+  const omitted = review.candidates.length - visible.length;
+  return {
+    text: `#${jobId}\nНайдено несколько опубликованных email. Выберите адрес только после проверки категории и источника.\n\n${lines.join('\n\n')}${omitted > 0 ? `\n\nЕщё адресов скрыто: ${omitted}. Используйте явную команду /email после проверки.` : ''}\n\nРучной известный адрес: /email ${jobId} name@example.com`,
+    replyMarkup: {
+      inline_keyboard: visible.filter((candidate) => candidate.automatic_selection_allowed).map((candidate) => [{
+        text: `${candidate.email} · ${candidate.category}`.slice(0, 64),
+        callback_data: candidate.callbackData,
+      }]),
+    },
+  };
+}
+
+function queueText(summary) {
+  const counts = new Map(summary.counts.map((row) => [row.status, Number(row.count)]));
+  const header = ['NEEDS_CONTACT', 'NEEDS_REVIEW', 'DRAFT_READY', 'APPROVED', 'SENDING', 'FAILED']
+    .map((status) => `${status}: ${counts.get(status) ?? 0}`).join('\n');
+  if (summary.jobs.length === 0) return `Очередь пуста.\n\n${header}`;
+  const rows = summary.jobs.map((job) => `#${job.job_id} · ${job.status}\n${job.hostname}${job.error_code ? ` · ${job.error_code}` : ''}`);
+  return `Текущая очередь:\n${header}\n\n${rows.join('\n\n')}`;
+}
+
+function nextText(job) {
+  if (!job) return 'Нет заданий, требующих действия. Пришлите URL следующей компании.';
+  const instruction = job.status === 'DRAFT_READY'
+    ? `Проверьте черновик; для повторного подтверждения: /approve ${job.job_id}`
+    : `Откройте сообщение с выбором email или используйте: /email ${job.job_id} name@example.com`;
+  return `Следующее действие · #${job.job_id}\n${job.hostname}\nСтатус: ${job.status}\n${instruction}`;
+}
+
 export function createTelegramBotHandler({ client, allowlist, analyze, stateStore = null, maxRegenerations = 2, dailyAnalysisLimit = 2, now = () => Date.now() } = {}) {
   if (!client || !allowlist || typeof analyze !== 'function') throw new TypeError('Telegram bot handler dependencies are required');
   const jobs = new Map();
@@ -97,7 +138,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     while (jobs.size > 100) jobs.delete(jobs.keys().next().value);
   }
 
-  async function executeAnalysis({ inputUrl, chatId, userId, updateId, seed, regeneration = 0, jobId = makeJobId(seed), draftVersion = regeneration + 1, begin = true }) {
+  async function executeAnalysis({ inputUrl, chatId, userId, updateId, seed, regeneration = 0, jobId = makeJobId(seed), draftVersion = regeneration + 1, begin = true, contactSelection = null }) {
     if (stateStore && begin) {
       const started = await stateStore.beginJob({ updateId, jobId, inputUrl, userId, chatId });
       if (started.replay) {
@@ -113,9 +154,16 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
         inputUrl,
         seed,
         jobId,
+        contactSelection,
         beforeModelCalls: stateStore ? () => stateStore.reserveAnalysis(jobId, draftVersion, dailyAnalysisLimit) : null,
       }));
       if (result.job_id !== jobId) throw new SafeStop('BOT_JOB_ID_MISMATCH', 'Analysis returned an unexpected job identifier');
+      if (stateStore && ['NEEDS_CONTACT', 'NEEDS_REVIEW'].includes(result.status)) {
+        const review = await stateStore.persistContactReview(result, { userId, chatId });
+        const message = contactReviewMessage(jobId, review);
+        await client.sendText(chatId, message.text, { replyMarkup: message.replyMarkup });
+        return { ok: true, jobId, status: result.status };
+      }
       let preview = result.telegram_preview;
       if (stateStore) {
         const persisted = await stateStore.persistAnalysis(result, { draftVersion, userId, chatId });
@@ -157,6 +205,44 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       return { ok: true, action: 'status' };
     }
     if (command === 'version') { await client.sendText(chatId, copy.version); return { ok: true, action: 'version' }; }
+    if (command === 'queue') {
+      if (!stateStore) { await client.sendText(chatId, 'Очередь доступна только в PostgreSQL runtime.'); return { ok: true, action: 'queue_unavailable' }; }
+      const summary = await stateStore.getQueueSummary(String(message.from.id), chatId);
+      await client.sendText(chatId, queueText(summary));
+      return { ok: true, action: 'queue' };
+    }
+    if (command === 'next') {
+      if (!stateStore) { await client.sendText(chatId, 'Команда доступна только в PostgreSQL runtime.'); return { ok: true, action: 'next_unavailable' }; }
+      const job = await stateStore.getNextActionable(String(message.from.id), chatId);
+      await client.sendText(chatId, nextText(job));
+      return { ok: true, action: 'next', jobId: job?.job_id ?? null };
+    }
+    if (command === 'usage') {
+      if (!stateStore) { await client.sendText(chatId, 'Статистика доступна только в PostgreSQL runtime.'); return { ok: true, action: 'usage_unavailable' }; }
+      const usage = await stateStore.getUsageSummary();
+      await client.sendText(chatId, `Использование за ${usage.usage_date} UTC\nАнализы: ${usage.analyses_completed} завершено / ${usage.analyses_reserved} зарезервировано / лимит ${dailyAnalysisLimit}\nОшибки после резерва: ${usage.analyses_failed}\nТокены: вход ${usage.input_tokens}, выход ${usage.output_tokens}\nSMTP: ${usage.smtp_accepted} принято провайдером / ${usage.smtp_queued} создано / лимит ${usage.send_limit}`);
+      return { ok: true, action: 'usage' };
+    }
+    if (command === 'email') {
+      const match = text.match(/^\/email(?:@[A-Za-z0-9_]+)?\s+(WO-[A-Z0-9]{6})\s+(\S+)$/iu);
+      if (!stateStore || !match) {
+        await client.sendText(chatId, 'Формат: /email WO-XXXXXX name@example.com\nИспользуйте только достоверно известный адрес; он будет помечен manual.');
+        return { ok: true, action: 'manual_email_usage' };
+      }
+      try {
+        const selected = await stateStore.selectManualContact({ jobId: match[1].toUpperCase(), email: match[2], userId: String(message.from.id), chatId, updateId: update.update_id });
+        if (selected.replay) { await client.sendText(chatId, 'Эта команда уже обработана.'); return { ok: true, action: selected.result_code, idempotentReplay: true }; }
+        await client.sendText(chatId, `#${selected.job_id}\nАдрес принят и явно помечен: ${selected.provenance}. Продолжаю анализ без передачи email модели.`);
+        return executeAnalysis({
+          inputUrl: selected.canonical_url, chatId, userId: String(message.from.id), updateId: update.update_id,
+          seed: `telegram-update-${update.update_id}-manual-contact`, jobId: selected.job_id, begin: false,
+          contactSelection: selected.selection,
+        });
+      } catch (error) {
+        await client.sendText(chatId, friendlyFailure(error));
+        return { ok: false, action: 'manual_email', ...asSafeResult(error) };
+      }
+    }
     if (command === 'approve') {
       const jobId = text.match(/\b(WO-[A-Z0-9]{6})\b/u)?.[1];
       if (!stateStore?.mailEnabled || !jobId) {
@@ -192,6 +278,22 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
   async function handleCallback(update) {
     const callback = update.callback_query;
     const data = String(callback.data ?? '');
+    if (stateStore && data.startsWith('contact:')) {
+      const userId = String(callback.from.id);
+      const chatId = String(callback.message.chat.id);
+      const selected = await stateStore.selectPublishedContact({ callbackData: data, userId, chatId, updateId: update.update_id });
+      if (selected.result_code !== 'CONTACT_SELECTED' || selected.replay) {
+        await client.answerCallbackQuery(callback.id, { text: selected.replay ? 'Адрес уже выбран.' : `Выбор остановлен: ${selected.result_code}.`, showAlert: true });
+        return { ok: true, action: selected.result_code, jobId: selected.job_id ?? null };
+      }
+      await client.answerCallbackQuery(callback.id, { text: `Выбран ${selected.contact.email} (${selected.contact.category}).` });
+      if (callback.message?.message_id != null) await client.clearInlineKeyboard(chatId, callback.message.message_id).catch(() => {});
+      return executeAnalysis({
+        inputUrl: selected.canonical_url, chatId, userId, updateId: update.update_id,
+        seed: `telegram-update-${update.update_id}-published-contact`, jobId: selected.job_id, begin: false,
+        contactSelection: selected.selection,
+      });
+    }
     const match = stateStore
       ? data.match(/^(mock_send|smtp_send|regenerate|reject):(WO-[A-Z0-9]{6}):[A-Za-z0-9_-]{22,43}$/u)
       : data.match(/^mock_(send|regenerate|reject):(WO-[A-Z0-9]{6})$/u);
