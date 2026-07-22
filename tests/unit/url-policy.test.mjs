@@ -17,15 +17,23 @@ test('blocks unsafe URL forms before DNS or network access', () => {
 });
 
 test('blocks private, reserved, documentation and link-local addresses', () => {
-  for (const address of ['10.0.0.1', '192.168.1.1', '127.0.0.1', '169.254.10.1', '192.0.2.10', '198.51.100.2', '203.0.113.4', '::1', 'fe80::1', 'fc00::1']) {
+  for (const address of ['10.0.0.1', '192.168.1.1', '127.0.0.1', '169.254.10.1', '192.0.2.10', '198.51.100.2', '203.0.113.4', '::1', '::ffff:127.0.0.1', 'fe80::1', 'fc00::1']) {
     assert.throws(() => assertPublicAddress(address), { code: 'URL_ADDRESS_BLOCKED' }, address);
   }
   assert.equal(assertPublicAddress('93.184.216.34'), '93.184.216.34');
 });
 
-test('rejects a hostname when any DNS answer is non-public', async () => {
-  await assert.rejects(
-    resolvePublicHost('example.com', async () => [{ address: '93.184.216.34', family: 4 }, { address: '127.0.0.1', family: 4 }]),
-    { code: 'URL_ADDRESS_BLOCKED' },
-  );
+test('keeps only public DNS answers so the pinned transport cannot select a blocked address', async () => {
+  const resolved = await resolvePublicHost('example.com', async () => [
+    { address: '93.184.216.34', family: 4 },
+    { address: 'fe80::1', family: 6 },
+  ]);
+  assert.deepEqual(resolved, [{ address: '93.184.216.34', family: 4 }]);
+});
+
+test('rejects a hostname when DNS provides no public address', async () => {
+  await assert.rejects(resolvePublicHost('example.com', async () => [
+    { address: '127.0.0.1', family: 4 },
+    { address: 'fe80::1', family: 6 },
+  ]), { code: 'URL_ADDRESS_BLOCKED' });
 });

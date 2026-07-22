@@ -290,7 +290,7 @@ flowchart LR
 - отсутствие `userinfo`, фрагмента и нестандартных портов;
 - разрешены только порты 80 и 443;
 - запрет literal IPv4/IPv6, `localhost`, `.local` и внутренних имён;
-- DNS A/AAAA не должны указывать на loopback, private, link-local, multicast, documentation или иные reserved ranges;
+- HTTP-транспорт получает только предварительно проверенные globally routable DNS A/AAAA; loopback, private, link-local, multicast, documentation и иные reserved ответы отбрасываются до DNS pinning, а отсутствие хотя бы одного публичного адреса останавливает загрузку;
 - redirect не может выводить на запрещённый адрес;
 - внутренние страницы — только тот же hostname или явно разрешённый поддомен;
 - TLS verification нельзя отключать;

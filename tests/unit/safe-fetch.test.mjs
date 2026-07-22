@@ -39,6 +39,18 @@ test('pins the public DNS result passed to the request transport', async () => {
   assert.deepEqual(observed, [{ address: '93.184.216.34', family: 4 }]);
 });
 
+test('never passes a blocked mixed-family DNS answer to the request transport', async () => {
+  let observed;
+  await safeFetch('https://example.com/', {
+    lookup: async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: 'fe80::1', family: 6 },
+    ],
+    request: async (_url, resolved) => { observed = resolved; return { status: 200, headers: { 'content-type': 'text/html' }, body: '<p>ok</p>' }; },
+  });
+  assert.deepEqual(observed, [{ address: '93.184.216.34', family: 4 }]);
+});
+
 test('pinned lookup supports the Node 24 all-address callback contract', async () => {
   const lookup = createPinnedLookup([{ address: '93.184.216.34', family: 4 }]);
   const all = await new Promise((resolve, reject) => lookup('example.com', { all: true }, (error, result) => error ? reject(error) : resolve(result)));

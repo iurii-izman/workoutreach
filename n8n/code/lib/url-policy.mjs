@@ -63,5 +63,16 @@ export async function resolvePublicHost(hostname, lookup = dns.lookup) {
     throw new SafeStop('URL_DNS_FAILED', 'Hostname could not be resolved');
   }
   if (!Array.isArray(results) || results.length === 0) throw new SafeStop('URL_DNS_EMPTY', 'Hostname has no A or AAAA records');
-  return results.map((entry) => ({ address: assertPublicAddress(entry.address), family: entry.family }));
+  const publicResults = [];
+  let firstBlocked = null;
+  for (const entry of results) {
+    try {
+      publicResults.push({ address: assertPublicAddress(entry.address), family: entry.family });
+    } catch (error) {
+      if (!(error instanceof SafeStop) || error.code !== 'URL_ADDRESS_BLOCKED') throw error;
+      firstBlocked ??= error;
+    }
+  }
+  if (publicResults.length === 0) throw firstBlocked ?? new SafeStop('URL_DNS_EMPTY', 'Hostname has no public A or AAAA records');
+  return publicResults;
 }
