@@ -69,7 +69,7 @@ function openAITransportSchema(schema) {
 
 export async function buildFactRequest(root, pages, settings = {}) {
   const schema = await loadJson(root, 'schemas/fact-extraction.v1.schema.json');
-  const prompt = await readFile(join(root, 'prompts/fact-extraction/v1.md'), 'utf8');
+  const prompt = await readFile(join(root, 'prompts/fact-extraction/v2.md'), 'utf8');
   const configured = typeof settings === 'string' ? modelSettings({ model: settings }) : modelSettings(settings);
   return {
     model: configured.model,
@@ -82,7 +82,7 @@ export async function buildFactRequest(root, pages, settings = {}) {
     instructions: prompt,
     input: [{ role: 'user', content: JSON.stringify({ sources: pages.map(({ source_id, source_type, title, text }) => ({ source_id, source_type, title, text })) }) }],
     text: { format: { type: 'json_schema', name: 'workoutreach_fact_v1', strict: true, schema: openAITransportSchema(schema) } },
-    metadata: { prompt_version: 'fact-extraction.v1', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
+    metadata: { prompt_version: 'fact-extraction.v2', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
   };
 }
 

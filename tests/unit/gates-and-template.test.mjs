@@ -11,6 +11,38 @@ test('evidence requires literal source excerpt and literal fact', () => {
   assert.throws(() => evidenceGate({ ...fact, fact: 'Acme получила миллион клиентов.' }, pages, 'acme.example'), { code: 'EVIDENCE_FACT_NOT_LITERAL' });
 });
 
+test('evidence preserves only a publication date literally present in the selected excerpt', () => {
+  const datedPages = [{ ...pages[0], text: '2026-07-22 Компания Acme создала проверяемый учебный сервис.' }];
+  const fact = {
+    company_name: 'Acme',
+    fact: 'Acme создала проверяемый учебный сервис.',
+    source_id: 'p01',
+    source_excerpt: '2026-07-22 Компания Acme создала проверяемый учебный сервис.',
+    source_type: 'about',
+    published_at: '2026-07-22',
+    decision: 'READY_FOR_REVIEW',
+  };
+  const accepted = evidenceGate(fact, datedPages, 'acme.example');
+  assert.equal(accepted.publishedAt, '2026-07-22');
+  assert.deepEqual(accepted.warnings, []);
+});
+
+test('evidence removes an unsupported optional publication date without weakening mandatory gates', () => {
+  const fact = {
+    company_name: 'Acme',
+    fact: 'Acme создала проверяемый учебный сервис.',
+    source_id: 'p01',
+    source_excerpt: 'Компания Acme создала проверяемый учебный сервис.',
+    source_type: 'about',
+    published_at: '2026-07-22',
+    decision: 'READY_FOR_REVIEW',
+  };
+  const accepted = evidenceGate(fact, pages, 'acme.example');
+  assert.equal(accepted.publishedAt, null);
+  assert.deepEqual(accepted.warnings, ['PUBLISHED_AT_UNCONFIRMED_REMOVED']);
+  assert.throws(() => evidenceGate({ ...fact, fact: 'Неподтверждённый факт.' }, pages, 'acme.example'), { code: 'EVIDENCE_FACT_NOT_LITERAL' });
+});
+
 test('evidence accepts an exact company name published in a loaded page title', () => {
   const titleOnlyPages = [{
     source_id: 'p01',

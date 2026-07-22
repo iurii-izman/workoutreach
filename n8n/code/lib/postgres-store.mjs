@@ -192,7 +192,7 @@ export class PostgresBotStore {
         {
           stage: 'aggregate',
           model: `${modelId(result.evidence.fact_model, this.configuredModelId)}+${modelId(result.evidence.phrase_model, this.configuredModelId)}`,
-          promptVersion: 'fact-extraction.v1+phrase-generation.v1',
+          promptVersion: `${result.evidence.fact_prompt_version}+${result.evidence.phrase_prompt_version}`,
           promptSha: sha256(`${result.evidence.fact_prompt_sha256}:${result.evidence.phrase_prompt_sha256}`),
           schemaSha: sha256(stableJson({ fact: result.evidence.fact_schema_sha256, phrase: result.evidence.phrase_schema_sha256 })),
           value: { analysis: result.analysis, evidence: result.evidence },

@@ -19,11 +19,11 @@ export function evidenceGate(fact, pages, hostname) {
     .match(/[\p{L}\p{M}\p{N}]+/gu)
     ?.some((token) => token.length >= 4 && /^[a-z0-9]+$/u.test(token) && domainBrand.includes(token)) ?? false;
   if (!companyOnSite && !companyInDomain) throw new SafeStop('EVIDENCE_COMPANY_UNCONFIRMED', 'Company name is not confirmed by the loaded site or domain');
-  if (fact.published_at !== null && !excerpt.includes(normalizeComparable(fact.published_at))) {
-    throw new SafeStop('EVIDENCE_DATE_UNCONFIRMED', 'Publication date is not present in the evidence excerpt');
-  }
+  const publishedAtConfirmed = fact.published_at === null || excerpt.includes(normalizeComparable(fact.published_at));
+  const publishedAt = publishedAtConfirmed ? fact.published_at : null;
+  const warnings = publishedAtConfirmed ? [] : ['PUBLISHED_AT_UNCONFIRMED_REMOVED'];
   if (fact.decision !== 'READY_FOR_REVIEW') throw new SafeStop('EVIDENCE_MODEL_STOP', 'Fact model did not approve review');
-  return { accepted: true, source, checks: ['source_id', 'source_type', 'excerpt_literal', 'fact_literal', 'company', 'published_at'] };
+  return { accepted: true, source, publishedAt, warnings, checks: ['source_id', 'source_type', 'excerpt_literal', 'fact_literal', 'company', 'published_at'] };
 }
 
 export function businessGate(phrase, offerProfile) {

@@ -32,6 +32,32 @@ test('synthetic end-to-end pipeline produces a full non-transmitted preview with
   assert.deepEqual(result.evidence.evidence_checks, ['source_id', 'source_type', 'excerpt_literal', 'fact_literal', 'company', 'published_at']);
 });
 
+test('pipeline removes an unsupported optional date and exposes the warning in review output', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  const modelAdapter = {
+    async fact(request) {
+      const envelope = await stub.fact(request);
+      return { ...envelope, output: { ...envelope.output, published_at: '2026-07-22' } };
+    },
+    phrase(request) {
+      return stub.phrase(request);
+    },
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    seed: 'integration-unconfirmed-date',
+  });
+  assert.equal(result.status, 'DRAFT_READY');
+  assert.equal(result.analysis.published_at, null);
+  assert.ok(result.analysis.warnings.includes('PUBLISHED_AT_UNCONFIRMED_REMOVED'));
+  assert.match(result.telegram_preview.text, /PUBLISHED_AT_UNCONFIRMED_REMOVED/u);
+  assert.equal(result.evidence.fact_prompt_version, 'fact-extraction.v2');
+});
+
 test('owner campaign profile is approved but cannot enable email transmission', async () => {
   const profile = await loadOfferProfile(root);
   assert.equal(profile.owner_approved, true);

@@ -125,14 +125,14 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
     source_id: fact.source_id,
     source_excerpt: compactExcerpt,
     source_type: fact.source_type,
-    published_at: fact.published_at,
+    published_at: evidence.publishedAt,
     personalization_phrase: phrase.personalization_phrase,
     overlap: phrase.overlap,
     offer_claim_ids: phrase.offer_claim_ids,
     word_count: wordCount(phrase.personalization_phrase),
     confidence: fact.confidence,
     decision: 'READY_FOR_REVIEW',
-    warnings: [...fact.warnings, ...phrase.warnings],
+    warnings: [...fact.warnings, ...evidence.warnings, ...phrase.warnings],
   };
   if (!business.targetRange) aggregate.warnings.push('PHRASE_OUTSIDE_TARGET_25_35');
   if (crawl.skippedPages.some((page) => page.code === 'FETCH_HTTP_STATUS')) aggregate.warnings.push('OPTIONAL_PAGE_NOT_FOUND_SKIPPED');
