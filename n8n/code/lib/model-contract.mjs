@@ -88,7 +88,7 @@ export async function buildFactRequest(root, pages, settings = {}) {
 
 export async function buildPhraseRequest(root, fact, offerProfile, settings = {}) {
   const schema = await loadJson(root, 'schemas/phrase-generation.v1.schema.json');
-  const prompt = await readFile(join(root, 'prompts/phrase-generation/v1.md'), 'utf8');
+  const prompt = await readFile(join(root, 'prompts/phrase-generation/v2.md'), 'utf8');
   const configured = typeof settings === 'string' ? modelSettings({ model: settings }) : modelSettings(settings);
   return {
     model: configured.model,
@@ -107,7 +107,7 @@ export async function buildPhraseRequest(root, fact, offerProfile, settings = {}
         source_type: fact.source_type,
         offer_profile: offerProfile,
         locale: offerProfile.locale,
-        phrase_word_limits: { target_min: 25, target_max: 35, hard_min: 18, hard_max: 40 },
+        phrase_word_limits: { target_min: 25, target_max: 32, hard_min: 18, hard_max: 35 },
         ...(settings.retryCode ? {
           retry_context: {
             previous_failure: String(settings.retryCode),
@@ -117,7 +117,7 @@ export async function buildPhraseRequest(root, fact, offerProfile, settings = {}
       }),
     }],
     text: { format: { type: 'json_schema', name: 'workoutreach_phrase_v1', strict: true, schema: openAITransportSchema(schema) } },
-    metadata: { prompt_version: 'phrase-generation.v1', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
+    metadata: { prompt_version: 'phrase-generation.v2', prompt_sha256: sha256(prompt), schema_sha256: sha256(stableJson(schema)) },
   };
 }
 

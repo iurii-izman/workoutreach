@@ -50,7 +50,7 @@ export function repairPhraseFormatting(value) {
   let text = normalizeWhitespace(value);
   const quoted = (text.startsWith('«') && text.endsWith('»')) || (text.startsWith('"') && text.endsWith('"'));
   if (quoted) text = normalizeWhitespace(text.slice(1, -1));
-  if (!/[.!?]/u.test(text)) text = `${text}.`;
+  if (!/[.!?]$/u.test(text)) text = `${text}.`;
   return text;
 }
 
@@ -59,7 +59,7 @@ function optionalPersonalizationFailure(code) {
 }
 
 function retryablePhraseFailure(code) {
-  return ['PHRASE_SENTENCE_COUNT', 'PHRASE_WORD_COUNT', 'PHRASE_GRAMMAR_AGREEMENT'].includes(code);
+  return ['PHRASE_SENTENCE_COUNT', 'PHRASE_SENTENCE_FRAGMENT', 'PHRASE_WORD_COUNT', 'PHRASE_GRAMMAR_AGREEMENT', 'PHRASE_PERSPECTIVE', 'PHRASE_FACT_PERSPECTIVE', 'PHRASE_BRIDGE_FORM', 'PHRASE_VAGUE_CONNECTION', 'PHRASE_TEMPLATE_REPETITION', 'PHRASE_STYLE'].includes(code);
 }
 
 function mergeModelMetadata(envelopes) {
@@ -200,13 +200,13 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
       if (onModelEnvelope) await onModelEnvelope({ phase: 'phrase', envelope });
       phrase = assertSchema(contracts.validatePhrase, assertCompletedModelEnvelope(envelope), 'PHRASE_SCHEMA_INVALID');
       try {
-        business = businessGate(phrase, offerProfile);
+        business = businessGate(phrase, offerProfile, { acceptedFact: fact.fact });
       } catch (error) {
         const firstFailure = asSafeResult(error);
         if (firstFailure.code === 'PHRASE_SENTENCE_COUNT') {
           const repaired = { ...phrase, personalization_phrase: repairPhraseFormatting(phrase.personalization_phrase) };
           try {
-            business = businessGate(repaired, offerProfile);
+            business = businessGate(repaired, offerProfile, { acceptedFact: fact.fact });
             phrase = { ...repaired, warnings: [...(repaired.warnings ?? []), 'PHRASE_FORMAT_REPAIRED'] };
           } catch {
             business = null;
@@ -219,7 +219,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
           phraseEnvelopes.push(envelope);
           if (onModelEnvelope) await onModelEnvelope({ phase: 'phrase_retry', envelope });
           phrase = assertSchema(contracts.validatePhrase, assertCompletedModelEnvelope(envelope), 'PHRASE_SCHEMA_INVALID');
-          business = businessGate(phrase, offerProfile);
+          business = businessGate(phrase, offerProfile, { acceptedFact: fact.fact });
           phrase = { ...phrase, warnings: [...(phrase.warnings ?? []), 'PHRASE_REGENERATED_AFTER_VALIDATION'] };
         }
         if (!business) throw error;
@@ -253,14 +253,14 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
       decision: 'READY_FOR_REVIEW',
       warnings: [...(fact.warnings ?? []), ...evidence.warnings, ...(phrase.warnings ?? [])],
     };
-    if (!business.targetRange) aggregate.warnings.push('PHRASE_OUTSIDE_TARGET_25_35');
+    if (!business.targetRange) aggregate.warnings.push('PHRASE_OUTSIDE_TARGET_25_32');
   } else {
     const fallbackSource = evidence?.source
       ?? pages.find((page) => page.source_id === contactDecision.selected.source_id)
       ?? pages[0];
     const universalOpening = template.manifest.universal_opening;
     aggregate = {
-      company_name: normalizeWhitespace(fact?.company_name ?? fallbackSource.title ?? hostname).slice(0, 200),
+      company_name: normalizeWhitespace(evidence && fact ? fact.company_name : hostname).slice(0, 200),
       fact: evidence && fact ? fact.fact : null,
       source_id: evidence && fact ? fact.source_id : fallbackSource.source_id,
       source_excerpt: evidence && fact
