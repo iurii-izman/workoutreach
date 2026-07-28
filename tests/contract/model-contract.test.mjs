@@ -40,6 +40,7 @@ test('request A and B use strict JSON Schema, Store=false, no tools and explicit
   assert.equal(factPayload.sources[0].title, page.title);
   assert.equal('sources' in phrasePayload, false);
   assert.equal('pages' in phrasePayload, false);
+  assert.equal(phraseRequest.metadata.prompt_version, 'phrase-generation.v2');
 });
 
 test('fact and phrase requests may use different model roles', async () => {

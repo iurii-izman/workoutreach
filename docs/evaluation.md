@@ -10,10 +10,12 @@ Each target is run separately with `npm run live:preview -- <URL>`. Telegram tra
 | Company name and published contact policy are correct | pass/fail/review |
 | Company fact is specific and useful | 0–2 |
 | Candidate overlap is defensible from one approved claim | 0–2 |
+| Company actions and candidate capabilities have the correct explicit owner | pass/fail |
 | Russian phrase is natural and specific | 0–2 |
 | Phrase fits the fixed email without repetition | 0–2 |
 | Unsupported praise, result, metric, role or production claim | disqualifying |
 | Greeting, CTA, CV reference, signature or contact data in phrase | disqualifying |
+| Candidate experience is attributed to the recipient, or the connection is only called “relevant” | disqualifying |
 
 Calibration acceptance requires all deterministic gates to pass, no disqualifying output, and owner acceptance of at least 8 of 10 complete previews. `NEEDS_CONTACT` and `NEEDS_REVIEW` are safe outcomes rather than model failures, but must be reviewed separately when measuring end-to-end readiness.
 

@@ -13,7 +13,9 @@ The pilot produced heterogeneous safe-stop codes, while one formatting defect in
 - Make `optional` personalization the production default, retain `off` and `required` modes for deterministic operation and evaluation.
 - Keep URL, robots, contact provenance, attachment, suppression, approval, idempotency and SMTP gates fail-closed.
 - Allow only deterministic removal of surrounding quotes or addition of a missing terminal mark.
-- Allow one phrase-only regeneration for sentence-count, word-count or agreement failures. A second failure produces an operator-visible universal draft.
+- Allow one phrase-only regeneration for sentence-count, word-count, agreement, actor-perspective or vague-connection failures. A second failure produces an operator-visible universal draft.
+- Keep company facts company-owned and candidate claims explicitly first-person candidate-owned; reject transferred ownership such as “your analytical cycle” and abstract “relevance” conclusions.
+- Use the reviewed two-sentence bridge and tighten the active hard range to 18–35 words; reject repetition of candidate metrics or detailed capabilities already present in the fixed body.
 - Persist the verified fact stage independently. Regeneration and `/retry` may reuse it only after validating it against freshly loaded pages.
 - Use `gpt-5.6-luna` for the fact and phrase roles at explicit `low` effort while retaining strict Responses API Structured Outputs, `store=false`, no tools and existing cache policy.
 - Count all phrase attempts in safe usage metadata and cap one draft version at three model calls.

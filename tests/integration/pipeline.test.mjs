@@ -47,7 +47,7 @@ test('optional personalization falls back to the owner-approved universal openin
         ...envelope,
         output: {
           ...envelope.output,
-          personalization_phrase: 'Это первое предложение с проверяемой длиной и корректным русским текстом для безопасного теста. Это второе предложение делает вариант недопустимым.',
+          personalization_phrase: 'Это первое предложение с проверяемой длиной и корректным русским текстом для безопасного теста. Это второе предложение пока допустимо. Это третье предложение делает вариант недопустимым.',
         },
       };
     },
@@ -69,6 +69,34 @@ test('optional personalization falls back to the owner-approved universal openin
   assert.match(result.draft.body_text, /^Добрый день!\s+Я помогаю интеграторам Bitrix24/u);
   assert.match(result.telegram_preview.text, /ПЕРВЫЙ АБЗАЦ · УНИВЕРСАЛЬНЫЙ/u);
   assert.equal(result.evidence.model_call_count, 3);
+});
+
+test('unverified fact fallback uses the verified hostname instead of an arbitrary page title', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  const modelAdapter = {
+    async fact(request) {
+      const envelope = await stub.fact(request);
+      return {
+        ...envelope,
+        output: {
+          ...envelope.output,
+          source_excerpt: 'Фрагмент, которого нет на загруженной странице.',
+        },
+      };
+    },
+    phrase: (request) => stub.phrase(request),
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+  });
+  assert.equal(result.analysis.personalization_mode, 'UNIVERSAL_FALLBACK');
+  assert.equal(result.analysis.company_name, 'synthetic-company.example');
+  assert.equal(result.analysis.fact, null);
+  assert.match(result.draft.body_text, /^Добрый день!\s+Я помогаю интеграторам Bitrix24/u);
 });
 
 test('safe local phrase repair appends only a missing terminal mark without another model call', async () => {
@@ -100,6 +128,40 @@ test('safe local phrase repair appends only a missing terminal mark without anot
   assert.ok(result.analysis.warnings.includes('PHRASE_FORMAT_REPAIRED'));
   assert.match(result.analysis.personalization_phrase, /\.$/u);
   assert.equal(repairPhraseFormatting('«Короткая тестовая фраза»'), 'Короткая тестовая фраза.');
+});
+
+test('perspective inversion is rejected and regenerated as company fact plus first-person candidate connection', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  let phraseCalls = 0;
+  const modelAdapter = {
+    fact: (request) => stub.fact(request),
+    async phrase(request) {
+      phraseCalls += 1;
+      const envelope = await stub.phrase(request);
+      if (phraseCalls > 1) return envelope;
+      return {
+        ...envelope,
+        output: {
+          ...envelope.output,
+          personalization_phrase: 'Учитывая работу сервиса с публичными текстами, ваш полный аналитический цикл от обследования материалов до сопровождения публикации выглядит особенно полезным для таких сложных проектов.',
+        },
+      };
+    },
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+  });
+  assert.equal(phraseCalls, 2);
+  assert.equal(result.analysis.personalization_mode, 'PERSONALIZED');
+  assert.ok(result.analysis.warnings.includes('PHRASE_REGENERATED_AFTER_VALIDATION'));
+  assert.match(result.analysis.personalization_phrase, /мне близки/iu);
+  assert.doesNotMatch(result.analysis.personalization_phrase, /ваш полный аналитический цикл|релевантн/iu);
+  assert.ok(result.evidence.business_checks.includes('single_candidate_perspective'));
+  assert.equal(result.evidence.model_call_count, 3);
 });
 
 test('universal-only mode makes no model call and reserves no model budget', async () => {

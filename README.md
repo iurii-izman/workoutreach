@@ -8,7 +8,7 @@ The project also includes a local read-mostly operator dashboard. It is delibera
 
 ## Current safety state
 
-- OpenAI: deterministic stub in CI/default dry-run; the owner runtime uses `gpt-5.6-luna` through the Responses API with strict Structured Outputs, explicit low effort, `store=false` and no tools. Personalization is optional and its failure cannot authorize or block the universal template.
+- OpenAI: deterministic stub in CI/default dry-run; the owner runtime uses `gpt-5.6-luna` through the Responses API with strict Structured Outputs, explicit low effort, `store=false` and no tools. Personalization is optional and its failure cannot authorize or block the universal template. A deterministic perspective gate keeps company facts and first-person candidate capabilities correctly attributed and rejects vague “relevance” conclusions.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
 - Mail: guarded Gmail SMTP adapter and at-most-once queue implemented. The repository/CI default is disabled; the owner runtime may enable it only after the owner-only self-test. The app password exists only as a Docker Secret, never in `.env` or Git.
 - Template and candidate profile: owner-approved and versioned; active v2 exposes only one reviewed opening paragraph, which is either the exact universal text or a fully gated personalized variant. Template eligibility alone cannot enable the disabled-by-default transport.
