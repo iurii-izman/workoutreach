@@ -9,7 +9,7 @@ npm run local:start
 npm run local:status
 ```
 
-A healthy status requires PostgreSQL, n8n, Caddy, dashboard and the bot to be healthy, migrations 004–011 to exist, no public Telegram webhook and no public PostgreSQL port. Caddy listens only on `127.0.0.1:443`. Do not run a second poller for the same bot token. n8n remains an inactive visual/orchestration layer; the Node.js bot is the only active analysis/send path.
+A healthy status requires PostgreSQL, n8n, Caddy, dashboard and the bot to be healthy, migrations 004–012 to exist, no public Telegram webhook and no public PostgreSQL port. Caddy listens only on `127.0.0.1:443`. Do not run a second poller for the same bot token. n8n remains an inactive visual/orchestration layer; the Node.js bot is the only active analysis/send path.
 
 ## Credit guard
 

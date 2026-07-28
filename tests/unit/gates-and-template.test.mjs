@@ -97,10 +97,13 @@ test('business gate recomputes word count and validates claim IDs', () => {
 test('template escapes HTML values and is owner-approved for guarded sending', async () => {
   const root = new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1));
   const template = await loadTemplate(decodeURIComponent(root));
-  const draft = renderDraft(template, { PERSONALIZATION_PHRASE: '<b>безопасная фраза</b>', COMPANY_NAME: 'A&B' });
+  const draft = renderDraft(template, { OPENING_PARAGRAPH: '<b>безопасная фраза</b>' });
   assert.match(draft.body_html, /&lt;b&gt;безопасная фраза&lt;\/b&gt;/u);
   assert.equal(draft.sendable, true);
-  assert.deepEqual(template.manifest.allowed_placeholders, ['COMPANY_NAME', 'PERSONALIZATION_PHRASE']);
+  assert.equal(template.manifest.version, 'email-ru-career-v2');
+  assert.deepEqual(template.manifest.allowed_placeholders, ['OPENING_PARAGRAPH']);
+  assert.match(template.manifest.universal_opening, /^Я помогаю интеграторам Bitrix24/u);
+  assert.doesNotMatch(draft.body_text, /Я системный и бизнес-аналитик с более чем/u);
   assert.doesNotMatch(draft.body_text, /Если такие обращения|больше не буду писать/u);
   assert.doesNotMatch(draft.body_html, /Если такие обращения|больше не буду писать/u);
 });

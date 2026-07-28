@@ -1,0 +1,21 @@
+{
+  "version": "email-ru-career-v2",
+  "locale": "ru",
+  "campaign_type": "career_outreach",
+  "sendable": true,
+  "owner_approved": true,
+  "opening_policy": "optional_personalization_with_owner_approved_universal_fallback",
+  "universal_opening": "Я помогаю интеграторам Bitrix24 превращать неструктурированные запросы клиентов в понятные требования и реализуемые CRM-решения — от обследования процессов и проектирования интеграций до запуска и сопровождения.",
+  "allowed_placeholders": ["OPENING_PARAGRAPH"],
+  "required_placeholders": ["OPENING_PARAGRAPH"],
+  "attachment": {
+    "required": true,
+    "filename": "Iurii_Izman_CV_Bitrix24_AI.pdf",
+    "mime_type": "application/pdf",
+    "source": "external_read_only_runtime_asset",
+    "path_env": "CV_ATTACHMENT_PATH",
+    "sha256_env": "CV_ATTACHMENT_SHA256",
+    "tracked_in_git": false
+  },
+  "notice": "OWNER-APPROVED UNIVERSAL-FIRST TEMPLATE; TRANSMISSION REQUIRES EXPLICIT SMTP ACTIVATION AND HUMAN APPROVAL"
+}

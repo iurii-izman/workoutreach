@@ -6,7 +6,7 @@ This runbook covers the first owner-operated evaluation and gradual delivery per
 
 ## Before each session
 
-1. Run `npm run local:status`; PostgreSQL, bot, n8n, proxy and dashboard must be healthy and migration 011 must be present.
+1. Run `npm run local:status`; PostgreSQL, bot, n8n, proxy and dashboard must be healthy and migrations 011–012 must be present.
 2. In Telegram run `/usage` and `/queue`.
 3. Check the Gmail inbox, sent folder and delivery-failure messages. Record replies, opt-outs, complaints and permanent failures in the dashboard/suppression workflow before approving anything else.
 4. If runtime status is ambiguous, do not approve. Use `npm run gmail:disable` and investigate.

@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach product for Bitrix24 integrators. Its current local runtime is a hardened Node.js Telegram long-polling service backed by PostgreSQL; it performs the crawl, two-stage OpenAI analysis, evidence gates, draft review and guarded Gmail SMTP dispatch. n8n is installed as an optional visual orchestration layer with six inactive credential-free workflow contracts, but it is not a second sender and is not on the current critical path.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach product for Bitrix24 integrators. Its current local runtime is a hardened Node.js Telegram long-polling service backed by PostgreSQL; it performs the crawl, deterministic contact/evidence gates, universal-first drafting, optional two-stage OpenAI personalization, review and guarded Gmail SMTP dispatch. n8n is installed as an optional visual orchestration layer with six inactive credential-free workflow contracts, but it is not a second sender and is not on the current critical path.
 
 The project also includes a local read-mostly operator dashboard. It is deliberately not a CRM or a send channel: it shows company-level delivery/engagement state and permits only guarded manual engagement updates.
 
@@ -8,13 +8,13 @@ The project also includes a local read-mostly operator dashboard. It is delibera
 
 ## Current safety state
 
-- OpenAI: deterministic stub in CI/default dry-run; an explicit `live:preview` uses the Responses API with strict Structured Outputs, `store=false` and no tools.
+- OpenAI: deterministic stub in CI/default dry-run; the owner runtime uses `gpt-5.6-luna` through the Responses API with strict Structured Outputs, explicit low effort, `store=false` and no tools. Personalization is optional and its failure cannot authorize or block the universal template.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
 - Mail: guarded Gmail SMTP adapter and at-most-once queue implemented. The repository/CI default is disabled; the owner runtime may enable it only after the owner-only self-test. The app password exists only as a Docker Secret, never in `.env` or Git.
-- Template and candidate profile: owner-approved and versioned; only company name and personalization phrase are dynamic. Template eligibility alone cannot enable the disabled-by-default transport.
+- Template and candidate profile: owner-approved and versioned; active v2 exposes only one reviewed opening paragraph, which is either the exact universal text or a fully gated personalized variant. Template eligibility alone cannot enable the disabled-by-default transport.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
-- Model budget: owner-approved ceiling `DAILY_ANALYSIS_LIMIT=40` analyses per UTC day; each analysis atomically reserves exactly two Structured Output calls immediately before network access. Contact-only stops consume zero model calls.
+- Model budget: owner-approved ceiling `DAILY_ANALYSIS_LIMIT=40` personalization attempts per UTC day. Universal-only drafts consume zero model calls; normal personalization uses two calls and one bounded phrase-validation retry may raise a draft to three. Contact-only stops consume zero model calls.
 
 ## Prerequisites
 
@@ -63,20 +63,21 @@ npm run local:start
 npm run local:status
 ```
 
-The bot accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. When several published emails are found, Telegram shows each category and source URL and requires an owner selection backed by a hashed one-time token. A known address can be supplied only through `/email WO-XXXXXX name@example.com`; it is stored with explicit `manual` provenance and is never sent to the model. `Перегенерировать` is limited to two explicit attempts, while every real send requires a separate one-time approval.
+The bot accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. When several published emails are found, Telegram shows each category and source URL and requires an owner selection backed by a hashed one-time token. A known address can be supplied only through `/email WO-XXXXXX name@example.com`; it is stored with explicit `manual` provenance and is never sent to the model. A model/format failure falls back to the owner-approved universal opening instead of discarding the draft. `Перегенерировать` reuses a freshly revalidated fact stage where possible and is limited to two explicit attempts, while every real send requires a separate one-time approval.
 
 Operational commands:
 
 - `/next` — oldest job requiring contact selection or draft review;
 - `/queue` — bounded actionable queue grouped by state;
 - `/usage` — current UTC-day analyses, tokens and SMTP acceptance counters;
+- `/retry WO-XXXXXX` — resume an owned `FAILED` job, reusing a verified fact only after fresh page validation;
 - `/status [WO-XXXXXX]`, `/approve WO-XXXXXX`, `/email WO-XXXXXX address`, `/help`, `/version`.
 
 Use `npm run local:stop` to stop containers without deleting their named volumes. Docker Desktop must be running; enable its own “Start Docker Desktop when you sign in” option if the bot should recover automatically after Windows login. Container restart policy is `unless-stopped`. See [the local Stage-2 runbook](docs/runbooks/local-stage2.md).
 
 Before real company work, follow [the pilot operations runbook](docs/runbooks/pilot-operations.md). Treat 50 as a reviewed quality dataset, not a one-day send batch; actual delivery ramps from 5 to 10 to 20 only after manual reply/failure checks.
 
-The owner-approved local capacity is `DAILY_ANALYSIS_LIMIT=40`, with two independent OpenAI calls reserved per analysis. The SMTP ceiling is 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
+The owner-approved local capacity is `DAILY_ANALYSIS_LIMIT=40`, with zero calls for universal-only, two for normal personalization and at most three after one phrase-only validation retry. The SMTP ceiling is 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
 
 ## Stage the Bitrix24 Kazakhstan catalog
 
@@ -148,6 +149,8 @@ npm run smoke:clean-clone
 - PostgreSQL-backed `/next`, `/queue` and `/usage` operator commands.
 - guarded Gmail SMTP transport with a database-enforced 30/day ceiling, CV revalidation, explicit one-time approval and no automatic retry after ambiguous outcomes;
 - migration `011_pilot_contact_resolution` with published/manual provenance and hashed pre-draft contact-review tokens.
+- migration `012_universal_first_resilience` with bounded failed-job resume and a three-call ceiling for one phrase-only retry.
+- owner-approved universal-first template v2 and aggregate schema v2 with explicit `PERSONALIZED`, `UNIVERSAL_FALLBACK` and `UNIVERSAL_ONLY` modes.
 
 ## Intentionally blocked
 

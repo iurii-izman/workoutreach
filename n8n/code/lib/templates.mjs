@@ -22,7 +22,7 @@ function renderOne(template, values, manifest, html = false) {
 }
 
 export async function loadTemplate(root) {
-  const base = join(root, 'templates/email/ru/v1');
+  const base = join(root, 'templates/email/ru/v2');
   const [manifestRaw, subject, bodyText, bodyHtml] = await Promise.all([
     readFile(join(base, 'manifest.json'), 'utf8'),
     readFile(join(base, 'subject.txt'), 'utf8'),
@@ -30,9 +30,11 @@ export async function loadTemplate(root) {
     readFile(join(base, 'body.html'), 'utf8'),
   ]);
   const manifest = JSON.parse(manifestRaw);
-  const extraAllowed = manifest.allowed_placeholders.filter((name) => !['COMPANY_NAME', 'PERSONALIZATION_PHRASE'].includes(name));
-  if (extraAllowed.length || manifest.allowed_placeholders.length !== 2) {
-    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Career template may expose only company name and personalization phrase placeholders');
+  if (manifest.allowed_placeholders.length !== 1 || manifest.allowed_placeholders[0] !== 'OPENING_PARAGRAPH') {
+    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Career template may expose only the reviewed opening paragraph placeholder');
+  }
+  if (typeof manifest.universal_opening !== 'string' || manifest.universal_opening.length < 40 || /[\r\n]/u.test(manifest.universal_opening)) {
+    throw new SafeStop('TEMPLATE_UNIVERSAL_OPENING_INVALID', 'Career template requires one owner-approved universal opening paragraph');
   }
   for (const required of manifest.required_placeholders) {
     if (!`${subject}\n${bodyText}\n${bodyHtml}`.includes(`{{${required}}}`)) {

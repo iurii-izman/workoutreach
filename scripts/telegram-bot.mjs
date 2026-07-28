@@ -113,7 +113,7 @@ async function main() {
     stateStore = new PostgresBotStore({
       pool: createPostgresPoolFromEnv(process.env),
       suppressionHmacKey: process.env.SUPPRESSION_HMAC_KEY,
-      modelId: process.env.OPENAI_MODEL ?? 'gpt-5.6',
+      modelId: process.env.OPENAI_MODEL ?? 'gpt-5.6-luna',
       mailEnabled: liveSendEnabled,
     });
     await stateStore.verifyReady();
@@ -145,7 +145,7 @@ async function main() {
     stateStore,
     maxRegenerations,
     dailyAnalysisLimit,
-    analyze: ({ inputUrl, seed, jobId, beforeModelCalls, contactSelection }) => analyzeLiveCompany({ root, inputUrl, seed, jobId, beforeModelCalls, contactSelection }),
+    analyze: ({ inputUrl, seed, jobId, beforeModelCalls, contactSelection, acceptedFact }) => analyzeLiveCompany({ root, inputUrl, seed, jobId, beforeModelCalls, contactSelection, acceptedFact }),
   });
   let offset = await readOffset();
   await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });

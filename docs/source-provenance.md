@@ -20,6 +20,8 @@ The local operator dashboard, migration 008, synthetic dashboard smoke fixtures,
 
 Pilot contact resolution, migration 011, Telegram operator commands, ADR-0012 and the pilot runbook were newly authored on 2026-07-20 from the owner's direct requirements and the existing Workoutreach contracts. No donor repository or external application source was consulted.
 
+The universal-first outreach copy, optional personalization fallback, bounded phrase repair/retry, failed-job resume behavior, migration 012, ADR-0015 and the GPT-5.6 Luna runtime selection were newly authored on 2026-07-28 from the owner's direct instructions, the owner-supplied Russian opening paragraph, the existing Workoutreach contracts, and official OpenAI model guidance. No donor repository or external application source was consulted.
+
 ## First-commit evidence
 
 The repository root commit is `70b54615815fe254f61a19f5c44c4c7732222bb6` and contains only `TECHNICAL_SPEC.md`.

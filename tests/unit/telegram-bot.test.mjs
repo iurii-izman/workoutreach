@@ -234,6 +234,55 @@ test('/approve explains why a legacy non-sendable draft must be recreated', asyn
   assert.match(client.events[0].text, /Пришлите URL заново/u);
 });
 
+test('/retry resumes an owned failed job from the latest verified fact stage', async () => {
+  const client = createFakeClient();
+  const acceptedFact = {
+    company_name: 'Acme',
+    fact: 'Acme внедряет Bitrix24.',
+    source_id: 'p01',
+    source_excerpt: 'Acme внедряет Bitrix24.',
+    source_type: 'about',
+    published_at: null,
+    confidence: 0.9,
+    decision: 'READY_FOR_REVIEW',
+    warnings: [],
+  };
+  let receivedFact;
+  const nonce = 'abcdefghijklmnopqrstuv';
+  const stateStore = {
+    async prepareRetry({ jobId }) {
+      assert.equal(jobId, 'WO-ABC234');
+      return { replay: false, result_code: 'RETRY_STARTED', job_id: jobId, canonical_url: 'https://example.com/', draft_version: 2 };
+    },
+    async getResumeFact() { return acceptedFact; },
+    async reserveAnalysis() {},
+    async persistAnalysis(result) {
+      return {
+        callbacks: {
+          send: `mock_send:${result.job_id}:${nonce}`,
+          regenerate: `regenerate:${result.job_id}:${nonce}`,
+          reject: `reject:${result.job_id}:${nonce}`,
+        },
+      };
+    },
+    async failJob() { assert.fail('retry must succeed'); },
+  };
+  const handler = createTelegramBotHandler({
+    client,
+    allowlist,
+    stateStore,
+    analyze: async ({ jobId, acceptedFact: resumed, beforeModelCalls }) => {
+      receivedFact = resumed;
+      await beforeModelCalls();
+      return { job_id: jobId, status: 'DRAFT_READY', telegram_preview: { text: 'preview', reply_markup: {} } };
+    },
+  });
+  const result = await handler.handleUpdate(messageUpdate(32, '/retry WO-ABC234'));
+  assert.equal(result.status, 'DRAFT_READY');
+  assert.deepEqual(receivedFact, acceptedFact);
+  assert.match(client.events[0].text, /последнего проверенного fact-stage/u);
+});
+
 test('contact review shows published email category/source and does not reserve model budget', async () => {
   const client = createFakeClient();
   let reserved = false;

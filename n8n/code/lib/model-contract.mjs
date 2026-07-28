@@ -12,7 +12,7 @@ export async function loadModelContracts(root) {
   const ajv = new Ajv2020({ allErrors: true, strict: true, formats: { date: /^\d{4}-\d{2}-\d{2}$/u } });
   const factSchema = await loadJson(root, 'schemas/fact-extraction.v1.schema.json');
   const phraseSchema = await loadJson(root, 'schemas/phrase-generation.v1.schema.json');
-  const aggregateSchema = await loadJson(root, 'schemas/analysis-result.v1.schema.json');
+  const aggregateSchema = await loadJson(root, 'schemas/analysis-result.v2.schema.json');
   return {
     factSchema,
     phraseSchema,
@@ -34,7 +34,7 @@ export function assertSchema(validate, value, code) {
 
 function modelSettings(settings = {}) {
   return {
-    model: settings.model ?? 'gpt-5.6',
+    model: settings.model ?? 'gpt-5.6-luna',
     effort: settings.effort ?? 'low',
     maxOutputTokens: settings.maxOutputTokens ?? 2200,
     promptCacheMode: settings.promptCacheMode ?? null,
@@ -108,6 +108,12 @@ export async function buildPhraseRequest(root, fact, offerProfile, settings = {}
         offer_profile: offerProfile,
         locale: offerProfile.locale,
         phrase_word_limits: { target_min: 25, target_max: 35, hard_min: 18, hard_max: 40 },
+        ...(settings.retryCode ? {
+          retry_context: {
+            previous_failure: String(settings.retryCode),
+            instruction: 'Return a fresh single-sentence variant that fixes only the stated validation failure.',
+          },
+        } : {}),
       }),
     }],
     text: { format: { type: 'json_schema', name: 'workoutreach_phrase_v1', strict: true, schema: openAITransportSchema(schema) } },

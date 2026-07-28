@@ -26,7 +26,7 @@ export function assertLiveAnalysisRuntime(env = process.env) {
   return Object.freeze({ liveSendEnabled, mailTransport, dailySendLimit });
 }
 
-export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, beforeModelCalls = null, modelAdapter = null, contactSelection = null } = {}) {
+export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, beforeModelCalls = null, modelAdapter = null, contactSelection = null, acceptedFact = null } = {}) {
   assertLiveAnalysisRuntime(env);
   if ((env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
 
@@ -51,18 +51,18 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
       jobTimeoutMs: positiveNumber(env.JOB_TIMEOUT_MS, 60_000, 'JOB_TIMEOUT_MS'),
     },
     modelSettings: {
-      model: env.OPENAI_MODEL ?? 'gpt-5.6',
+      model: env.OPENAI_MODEL ?? 'gpt-5.6-luna',
       effort: env.OPENAI_REASONING_EFFORT ?? 'low',
       maxOutputTokens: positiveNumber(env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_MAX_OUTPUT_TOKENS'),
     },
     factModelSettings: {
-      model: env.OPENAI_FACT_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6',
+      model: env.OPENAI_FACT_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6-luna',
       effort: env.OPENAI_FACT_REASONING_EFFORT ?? env.OPENAI_REASONING_EFFORT ?? 'low',
       maxOutputTokens: positiveNumber(env.OPENAI_FACT_MAX_OUTPUT_TOKENS ?? env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_FACT_MAX_OUTPUT_TOKENS'),
       promptCacheMode: env.OPENAI_FACT_PROMPT_CACHE_MODE ?? 'explicit',
     },
     phraseModelSettings: {
-      model: env.OPENAI_PHRASE_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6',
+      model: env.OPENAI_PHRASE_MODEL ?? env.OPENAI_MODEL ?? 'gpt-5.6-luna',
       effort: env.OPENAI_PHRASE_REASONING_EFFORT ?? env.OPENAI_REASONING_EFFORT ?? 'low',
       maxOutputTokens: positiveNumber(env.OPENAI_PHRASE_MAX_OUTPUT_TOKENS ?? env.OPENAI_MAX_OUTPUT_TOKENS, 2200, 'OPENAI_PHRASE_MAX_OUTPUT_TOKENS'),
       promptCacheMode: env.OPENAI_PHRASE_PROMPT_CACHE_MODE ?? 'explicit',
@@ -70,6 +70,8 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
     onModelEnvelope,
     beforeModelCalls,
     contactSelection,
+    acceptedFact,
+    personalizationMode: env.OUTREACH_PERSONALIZATION_MODE ?? 'optional',
     mode: 'guarded-live-eval',
   });
 }

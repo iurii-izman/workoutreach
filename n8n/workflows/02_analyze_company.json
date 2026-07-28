@@ -23,7 +23,7 @@
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 2,
       "position": [440, -80],
-      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/fact-extraction.v1.schema.json" },
+      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6-luna", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/fact-extraction.v1.schema.json" },
       "disabled": true
     },
     {
@@ -39,7 +39,7 @@
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 2,
       "position": [880, -80],
-      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/phrase-generation.v1.schema.json" },
+      "parameters": { "resource": "text", "operation": "message", "modelId": "gpt-5.6-luna", "store": false, "tools": [], "outputFormat": "json_schema", "schemaFile": "schemas/phrase-generation.v1.schema.json" },
       "disabled": true
     },
     {
