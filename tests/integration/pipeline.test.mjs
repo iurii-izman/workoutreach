@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createFixtureFetcher, createModelStub } from '../../n8n/code/lib/fixture-adapters.mjs';
-import { analyzeDryRun, compactEvidenceExcerpt, loadOfferProfile } from '../../n8n/code/lib/pipeline.mjs';
+import { analyzeDryRun, compactEvidenceExcerpt, loadOfferProfile, repairPhraseFormatting } from '../../n8n/code/lib/pipeline.mjs';
 
 const root = decodeURIComponent(new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1)));
 
@@ -22,13 +23,134 @@ test('synthetic end-to-end pipeline produces a full non-transmitted preview with
   assert.deepEqual(result.crawl.skipped_pages, []);
   assert.equal(result.contact.selected.email, 'hello@synthetic-company.example');
   assert.equal(result.analysis.decision, 'READY_FOR_REVIEW');
+  assert.equal(result.analysis.personalization_mode, 'PERSONALIZED');
   assert.ok(result.analysis.source_excerpt.length <= 500);
   assert.match(result.analysis.source_excerpt, /Синтетика Лаб разработала учебный сервис/u);
   assert.equal(result.draft.sendable, true);
   assert.equal(result.safety.live_send_enabled, false);
   assert.equal(result.telegram_preview.transmitted, false);
-  assert.match(result.telegram_preview.text, /ПЕРСОНАЛЬНАЯ ФРАЗА/u);
+  assert.match(result.telegram_preview.text, /ПЕРВЫЙ АБЗАЦ · ПЕРСОНАЛЬНЫЙ/u);
   assert.match(result.telegram_preview.text, /ИСТОЧНИК/u);
+  assert.deepEqual(result.evidence.evidence_checks, ['source_id', 'source_type', 'excerpt_literal', 'fact_literal', 'company', 'published_at']);
+});
+
+test('optional personalization falls back to the owner-approved universal opening after one bounded phrase retry', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  let phraseCalls = 0;
+  let reservations = 0;
+  const modelAdapter = {
+    fact: (request) => stub.fact(request),
+    async phrase(request) {
+      phraseCalls += 1;
+      const envelope = await stub.phrase(request);
+      return {
+        ...envelope,
+        output: {
+          ...envelope.output,
+          personalization_phrase: 'Это первое предложение с проверяемой длиной и корректным русским текстом для безопасного теста. Это второе предложение делает вариант недопустимым.',
+        },
+      };
+    },
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    beforeModelCalls: async () => { reservations += 1; },
+    personalizationMode: 'optional',
+  });
+  assert.equal(phraseCalls, 2);
+  assert.equal(reservations, 1);
+  assert.equal(result.analysis.personalization_mode, 'UNIVERSAL_FALLBACK');
+  assert.match(result.analysis.fact, /Синтетика Лаб/u);
+  assert.ok(result.analysis.warnings.includes('PERSONALIZATION_REASON_PHRASE_SENTENCE_COUNT'));
+  assert.match(result.draft.body_text, /^Добрый день!\s+Я помогаю интеграторам Bitrix24/u);
+  assert.match(result.telegram_preview.text, /ПЕРВЫЙ АБЗАЦ · УНИВЕРСАЛЬНЫЙ/u);
+  assert.equal(result.evidence.model_call_count, 3);
+});
+
+test('safe local phrase repair appends only a missing terminal mark without another model call', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  let phraseCalls = 0;
+  const modelAdapter = {
+    fact: (request) => stub.fact(request),
+    async phrase(request) {
+      phraseCalls += 1;
+      const envelope = await stub.phrase(request);
+      return {
+        ...envelope,
+        output: {
+          ...envelope.output,
+          personalization_phrase: envelope.output.personalization_phrase.replace(/\.$/u, ''),
+        },
+      };
+    },
+  };
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter,
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+  });
+  assert.equal(phraseCalls, 1);
+  assert.equal(result.analysis.personalization_mode, 'PERSONALIZED');
+  assert.ok(result.analysis.warnings.includes('PHRASE_FORMAT_REPAIRED'));
+  assert.match(result.analysis.personalization_phrase, /\.$/u);
+  assert.equal(repairPhraseFormatting('«Короткая тестовая фраза»'), 'Короткая тестовая фраза.');
+});
+
+test('universal-only mode makes no model call and reserves no model budget', async () => {
+  let calls = 0;
+  let reservations = 0;
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter: { async fact() { calls += 1; }, async phrase() { calls += 1; } },
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    beforeModelCalls: async () => { reservations += 1; },
+    personalizationMode: 'off',
+  });
+  assert.equal(calls, 0);
+  assert.equal(reservations, 0);
+  assert.equal(result.analysis.personalization_mode, 'UNIVERSAL_ONLY');
+  assert.equal(result.analysis.fact, null);
+  assert.equal(result.evidence.model_attempted, false);
+});
+
+test('retry reuses a previously verified fact, revalidates its evidence and calls only the phrase model', async () => {
+  const stub = await createModelStub(root, 'synthetic-company');
+  const acceptedFact = JSON.parse(await readFile(`${root}/fixtures/model-results/synthetic-company/fact.json`, 'utf8'));
+  let factCalls = 0;
+  let phraseCalls = 0;
+  let reservations = 0;
+  const result = await analyzeDryRun({
+    root,
+    inputUrl: 'https://synthetic-company.example/',
+    fetcher: await createFixtureFetcher(root, 'synthetic-company'),
+    modelAdapter: {
+      async fact() {
+        factCalls += 1;
+        throw new Error('fact model must not be called for a verified resume fact');
+      },
+      async phrase(request) {
+        phraseCalls += 1;
+        return stub.phrase(request);
+      },
+    },
+    offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    acceptedFact,
+    beforeModelCalls: async () => { reservations += 1; },
+  });
+  assert.equal(result.status, 'DRAFT_READY');
+  assert.equal(result.analysis.personalization_mode, 'PERSONALIZED');
+  assert.equal(factCalls, 0);
+  assert.equal(phraseCalls, 1);
+  assert.equal(reservations, 1);
+  assert.equal(result.evidence.fact_model.model, 'reused-verified-fact');
   assert.deepEqual(result.evidence.evidence_checks, ['source_id', 'source_type', 'excerpt_literal', 'fact_literal', 'company', 'published_at']);
 });
 

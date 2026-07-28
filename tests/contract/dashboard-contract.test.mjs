@@ -36,7 +36,7 @@ test('local status requires every runtime service and pilot migration', () => {
   for (const service of ['workoutreach-postgres', 'workoutreach-n8n', 'workoutreach-proxy', 'workoutreach-dashboard', 'workoutreach-bot']) {
     assert.match(localStatus, new RegExp(`containers\\['${service}'\\]\\.health === 'healthy'`, 'u'));
   }
-  for (const version of ['004', '005', '006', '007', '008', '009', '010', '011']) {
+  for (const version of ['004', '005', '006', '007', '008', '009', '010', '011', '012']) {
     assert.match(localStatus, new RegExp(`database\\.migration_${version} === true`, 'u'));
   }
 });

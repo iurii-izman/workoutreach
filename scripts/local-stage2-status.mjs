@@ -24,7 +24,7 @@ if (containers['workoutreach-postgres'].running) {
   const query = run('docker', [
     'compose', '-f', 'compose.yaml', '-f', 'compose.local.yaml', 'exec', '-T', 'workoutreach-postgres',
     'psql', '-X', '-Atq', '-U', 'workoutreach_admin', '-d', 'workoutreach_business',
-    '-c', "SELECT json_build_object('migration_004',bool_or(version='004_local_stage_2_runtime'),'migration_005',bool_or(version='005_local_model_budget'),'migration_006',bool_or(version='006_guarded_smtp_delivery'),'migration_007',bool_or(version='007_stage_3_template_sendability'),'migration_008',bool_or(version='008_local_operator_dashboard'),'migration_009',bool_or(version='009_owner_daily_capacity'),'migration_010',bool_or(version='010_immutable_migration_registry'),'migration_011',bool_or(version='011_pilot_contact_resolution'),'jobs',(SELECT count(*) FROM workoutreach.jobs),'mock_outbox',(SELECT count(*) FROM workoutreach.outbox WHERE transport='mock'),'smtp_outbox',(SELECT count(*) FROM workoutreach.outbox WHERE transport='smtp'),'model_runs_today',(SELECT count(*) FROM workoutreach.model_runs WHERE run_date=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date),'mail',(SELECT json_build_object('enabled',live_send_enabled,'transport',mail_transport,'daily_limit',daily_send_limit,'kill_switch',kill_switch_enabled) FROM workoutreach.mail_runtime_controls WHERE singleton)) FROM workoutreach.schema_migrations;",
+    '-c', "SELECT json_build_object('migration_004',bool_or(version='004_local_stage_2_runtime'),'migration_005',bool_or(version='005_local_model_budget'),'migration_006',bool_or(version='006_guarded_smtp_delivery'),'migration_007',bool_or(version='007_stage_3_template_sendability'),'migration_008',bool_or(version='008_local_operator_dashboard'),'migration_009',bool_or(version='009_owner_daily_capacity'),'migration_010',bool_or(version='010_immutable_migration_registry'),'migration_011',bool_or(version='011_pilot_contact_resolution'),'migration_012',bool_or(version='012_universal_first_resilience'),'jobs',(SELECT count(*) FROM workoutreach.jobs),'mock_outbox',(SELECT count(*) FROM workoutreach.outbox WHERE transport='mock'),'smtp_outbox',(SELECT count(*) FROM workoutreach.outbox WHERE transport='smtp'),'model_runs_today',(SELECT count(*) FROM workoutreach.model_runs WHERE run_date=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date),'mail',(SELECT json_build_object('enabled',live_send_enabled,'transport',mail_transport,'daily_limit',daily_send_limit,'kill_switch',kill_switch_enabled) FROM workoutreach.mail_runtime_controls WHERE singleton)) FROM workoutreach.schema_migrations;",
   ]);
   if (query.status === 0) database = { reachable: true, ...JSON.parse(query.stdout.trim()) };
 }
@@ -42,7 +42,8 @@ const ok = containers['workoutreach-postgres'].health === 'healthy'
   && database.migration_008 === true
   && database.migration_009 === true
   && database.migration_010 === true
-  && database.migration_011 === true;
+  && database.migration_011 === true
+  && database.migration_012 === true;
 
 console.log(JSON.stringify({
   ok,

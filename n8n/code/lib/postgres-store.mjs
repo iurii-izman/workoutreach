@@ -39,7 +39,7 @@ export function createPostgresPoolFromEnv(env = process.env) {
 }
 
 export class PostgresBotStore {
-  constructor({ pool, suppressionHmacKey, modelId: configuredModelId = 'gpt-5.6', mailEnabled = false } = {}) {
+  constructor({ pool, suppressionHmacKey, modelId: configuredModelId = 'gpt-5.6-luna', mailEnabled = false } = {}) {
     if (!pool || !suppressionHmacKey) throw new TypeError('PostgreSQL pool and suppression HMAC key are required');
     this.pool = pool;
     this.suppressionHmacKey = suppressionHmacKey;
@@ -48,7 +48,7 @@ export class PostgresBotStore {
   }
 
   async verifyReady() {
-    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '007_stage_3_template_sendability') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '011_pilot_contact_resolution') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
+    const result = await this.pool.query("SELECT EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '004_local_stage_2_runtime') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '005_local_model_budget') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '006_guarded_smtp_delivery') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '007_stage_3_template_sendability') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '011_pilot_contact_resolution') AND EXISTS(SELECT 1 FROM workoutreach.schema_migrations WHERE version = '012_universal_first_resilience') AS ready, live_send_enabled, mail_transport, daily_send_limit, kill_switch_enabled FROM workoutreach.stage2_safety_controls WHERE singleton = true");
     const row = result.rows[0];
     if (!row?.ready) throw new SafeStop('DATABASE_MIGRATION_MISSING', 'Local Stage-2 runtime and model-budget migrations are required');
     return true;
@@ -159,10 +159,13 @@ export class PostgresBotStore {
         );
       }
 
+      const deterministicModel = result.analysis.personalization_mode === 'PERSONALIZED'
+        ? 'reused-verified-stage'
+        : 'deterministic-universal-opening';
       const analysisRows = [
         {
           stage: 'fact',
-          model: modelId(result.evidence.fact_model, this.configuredModelId),
+          model: modelId(result.evidence.fact_model, deterministicModel),
           promptVersion: result.evidence.fact_prompt_version,
           promptSha: result.evidence.fact_prompt_sha256,
           schemaSha: result.evidence.fact_schema_sha256,
@@ -174,11 +177,13 @@ export class PostgresBotStore {
             source_type: result.analysis.source_type,
             published_at: result.analysis.published_at,
             confidence: result.analysis.confidence,
+            decision: 'READY_FOR_REVIEW',
+            warnings: [],
           },
         },
         {
           stage: 'phrase',
-          model: modelId(result.evidence.phrase_model, this.configuredModelId),
+          model: modelId(result.evidence.phrase_model, deterministicModel),
           promptVersion: result.evidence.phrase_prompt_version,
           promptSha: result.evidence.phrase_prompt_sha256,
           schemaSha: result.evidence.phrase_schema_sha256,
@@ -191,10 +196,10 @@ export class PostgresBotStore {
         },
         {
           stage: 'aggregate',
-          model: `${modelId(result.evidence.fact_model, this.configuredModelId)}+${modelId(result.evidence.phrase_model, this.configuredModelId)}`,
+          model: `${modelId(result.evidence.fact_model, deterministicModel)}+${modelId(result.evidence.phrase_model, deterministicModel)}`,
           promptVersion: `${result.evidence.fact_prompt_version}+${result.evidence.phrase_prompt_version}`,
           promptSha: sha256(`${result.evidence.fact_prompt_sha256}:${result.evidence.phrase_prompt_sha256}`),
-          schemaSha: sha256(stableJson({ fact: result.evidence.fact_schema_sha256, phrase: result.evidence.phrase_schema_sha256 })),
+          schemaSha: result.evidence.aggregate_schema_sha256 ?? sha256(stableJson({ fact: result.evidence.fact_schema_sha256, phrase: result.evidence.phrase_schema_sha256 })),
           value: { analysis: result.analysis, evidence: result.evidence },
         },
       ];
@@ -202,7 +207,7 @@ export class PostgresBotStore {
         await client.query(
           `INSERT INTO workoutreach.analyses(job_id,stage,version,model_id,prompt_version,prompt_sha256,schema_version,schema_sha256,offer_version,offer_sha256,result,decision)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12)`,
-          [result.job_id, row.stage, version, row.model, row.promptVersion, row.promptSha, `${row.stage}.v1`, row.schemaSha, result.evidence.offer_version ?? null, result.evidence.offer_sha256, JSON.stringify(row.value), result.analysis.decision],
+          [result.job_id, row.stage, version, row.model, row.promptVersion, row.promptSha, row.stage === 'aggregate' ? (result.evidence.aggregate_schema_version ?? 'aggregate.v2') : `${row.stage}.v1`, row.schemaSha, result.evidence.offer_version ?? null, result.evidence.offer_sha256, JSON.stringify(row.value), result.analysis.decision],
         );
       }
 
@@ -232,16 +237,25 @@ export class PostgresBotStore {
         "UPDATE workoutreach.telegram_updates SET result_code='DRAFT_READY' WHERE job_id=$1 AND update_id=(SELECT max(update_id) FROM workoutreach.telegram_updates WHERE job_id=$1)",
         [result.job_id],
       );
-      const completedRun = await client.query(
-        `UPDATE workoutreach.model_runs
-         SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP,usage=$3::jsonb
-         WHERE job_id=$1 AND draft_version=$2 AND status='RESERVED'`,
-        [result.job_id, version, JSON.stringify({
-          fact: result.evidence.fact_model?.usage ?? null,
-          phrase: result.evidence.phrase_model?.usage ?? null,
-        })],
+      if (result.evidence.model_attempted === true) {
+        const completedRun = await client.query(
+          `UPDATE workoutreach.model_runs
+           SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP,usage=$3::jsonb
+           WHERE job_id=$1 AND draft_version=$2 AND status='RESERVED'`,
+          [result.job_id, version, JSON.stringify({
+            fact: result.evidence.fact_model?.usage ?? null,
+            phrase: result.evidence.phrase_model?.usage ?? null,
+          })],
+        );
+        if (completedRun.rowCount !== 1) throw new SafeStop('MODEL_BUDGET_RESERVATION_MISSING', 'Attempted personalization requires one reserved model-budget row');
+      }
+      await client.query(
+        `INSERT INTO workoutreach.audit_log(job_id,event_type,actor_type,safe_metadata)
+         VALUES($1,'DRAFT_PERSONALIZATION_RESULT','system',jsonb_build_object(
+           'mode',$2::text,'failure_code',$3::text,'model_call_count',$4::integer
+         ))`,
+        [result.job_id, result.analysis.personalization_mode, result.evidence.personalization_failure_code ?? null, result.evidence.model_call_count ?? 0],
       );
-      if (completedRun.rowCount !== 1) throw new SafeStop('MODEL_BUDGET_RESERVATION_MISSING', 'Analysis cannot be persisted without one reserved model-budget row');
       await client.query('COMMIT');
       return { callbacks: { send: callbacks[sendAction], regenerate: callbacks.regenerate, reject: callbacks.reject }, draftVersion: version, mailEnabled: this.mailEnabled };
     } catch (error) {
@@ -443,6 +457,76 @@ export class PostgresBotStore {
       );
       await client.query("UPDATE workoutreach.model_runs SET status='FAILED' WHERE job_id=$1 AND status='RESERVED'", [jobId]);
       await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getResumeFact(jobId, userId, chatId) {
+    const result = await this.pool.query(
+      `SELECT a.result
+       FROM workoutreach.jobs j
+       JOIN LATERAL (
+         SELECT result
+         FROM workoutreach.analyses
+         WHERE job_id=j.job_id AND stage='fact' AND result->>'fact' IS NOT NULL
+         ORDER BY version DESC LIMIT 1
+       ) a ON true
+       WHERE j.job_id=$1 AND j.telegram_user_id=$2 AND j.telegram_chat_id=$3`,
+      [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+    );
+    const fact = result.rows[0]?.result;
+    if (!fact) return null;
+    return {
+      ...fact,
+      decision: fact.decision ?? 'READY_FOR_REVIEW',
+      warnings: Array.isArray(fact.warnings) ? fact.warnings : [],
+    };
+  }
+
+  async prepareRetry({ jobId, userId, chatId, updateId }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const replay = await client.query('SELECT job_id,result_code FROM workoutreach.telegram_updates WHERE update_id=$1', [asInteger(updateId, 'update_id')]);
+      if (replay.rowCount === 1) {
+        await client.query('COMMIT');
+        return { replay: true, result_code: replay.rows[0].result_code, job_id: replay.rows[0].job_id };
+      }
+      const locked = await client.query(
+        `SELECT job_id,canonical_url,status,expires_at
+         FROM workoutreach.jobs
+         WHERE job_id=$1 AND telegram_user_id=$2 AND telegram_chat_id=$3
+         FOR UPDATE`,
+        [jobId, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
+      );
+      const job = locked.rows[0];
+      if (!job) throw new SafeStop('RETRY_NOT_AUTHORIZED', 'Retry target is unavailable');
+      if (job.status !== 'FAILED') throw new SafeStop('RETRY_STATE_INVALID', 'Only a failed job can be retried with /retry');
+      if (new Date(job.expires_at).getTime() <= Date.now()) throw new SafeStop('RETRY_EXPIRED', 'Failed job is expired');
+      const versions = await client.query(
+        `SELECT GREATEST(
+           COALESCE((SELECT max(draft_version) FROM workoutreach.drafts WHERE job_id=$1),0),
+           COALESCE((SELECT max(draft_version) FROM workoutreach.model_runs WHERE job_id=$1),0)
+         )::integer AS latest`,
+        [jobId],
+      );
+      const draftVersion = Number(versions.rows[0]?.latest ?? 0) + 1;
+      if (draftVersion > 3) throw new SafeStop('RETRY_LIMIT', 'Job retry limit is exhausted');
+      await client.query("UPDATE workoutreach.jobs SET status='ANALYZING',error_code=NULL WHERE job_id=$1", [jobId]);
+      await client.query(
+        "INSERT INTO workoutreach.telegram_updates(update_id,telegram_user_id,telegram_chat_id,job_id,result_code) VALUES($1,$2,$3,$4,'RETRY_STARTED')",
+        [asInteger(updateId, 'update_id'), asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id'), jobId],
+      );
+      await client.query(
+        "INSERT INTO workoutreach.audit_log(job_id,event_type,actor_type,safe_metadata) VALUES($1,'RETRY_STARTED','operator',jsonb_build_object('draft_version',$2::integer))",
+        [jobId, draftVersion],
+      );
+      await client.query('COMMIT');
+      return { replay: false, result_code: 'RETRY_STARTED', job_id: jobId, canonical_url: job.canonical_url, draft_version: draftVersion };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

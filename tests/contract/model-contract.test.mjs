@@ -49,3 +49,18 @@ test('fact and phrase requests may use different model roles', async () => {
   assert.equal(factRequest.model, 'gpt-5.6-luna');
   assert.equal(phraseRequest.model, 'gpt-5.6-terra');
 });
+
+test('phrase retry carries only a safe validation code and no previous generated text', async () => {
+  const request = await buildPhraseRequest(
+    root,
+    validFact,
+    { locale: 'ru', claims: [{ id: 'claim-1', text: 'Allowed' }] },
+    { model: 'gpt-5.6-luna', retryCode: 'PHRASE_SENTENCE_COUNT' },
+  );
+  const payload = JSON.parse(request.input[0].content);
+  assert.deepEqual(payload.retry_context, {
+    previous_failure: 'PHRASE_SENTENCE_COUNT',
+    instruction: 'Return a fresh single-sentence variant that fixes only the stated validation failure.',
+  });
+  assert.equal('previous_output' in payload.retry_context, false);
+});

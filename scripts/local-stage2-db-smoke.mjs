@@ -65,12 +65,18 @@ try {
     callbackData: persistedFirst.callbacks.regenerate, userId, chatId, updateId: 920002,
   });
   if (regeneration.result_code !== 'REGENERATION_STARTED' || regeneration.job_status !== 'ANALYZING') throw new Error('Regeneration did not enter ANALYZING');
+  await store.failJob(jobId, 'PHRASE_SENTENCE_COUNT');
+  const resumeFact = await store.getResumeFact(jobId, userId, chatId);
+  if (!resumeFact?.fact || resumeFact.decision !== 'READY_FOR_REVIEW') throw new Error('Verified fact was not available for retry resume');
+  const retry = await store.prepareRetry({ jobId, userId, chatId, updateId: 920003 });
+  const retryReplay = await store.prepareRetry({ jobId, userId, chatId, updateId: 920003 });
+  if (retry.result_code !== 'RETRY_STARTED' || retry.draft_version !== 2 || retryReplay.replay !== true) throw new Error('Failed-job retry contract failed');
   await store.reserveAnalysis(jobId, 2, 5);
   const second = await analyze('local-stage2-v2');
   const persistedSecond = await store.persistAnalysis(second, { draftVersion: 2, userId, chatId });
 
-  const approved = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920003 });
-  const replay = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920003 });
+  const approved = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920004 });
+  const replay = await store.approveMock({ callbackData: persistedSecond.callbacks.send, userId, chatId, updateId: 920004 });
   if (approved.result_code !== 'MOCK_OUTBOX_CREATED' || replay.result_code !== approved.result_code) throw new Error('Mock approval replay contract failed');
 
   const counts = await secondPool.query(
@@ -145,6 +151,7 @@ try {
     gate: 'local-stage2-db-smoke', ok: true, restart_recovery: true,
     draft_versions: row.drafts, immutable_analysis_rows: row.analyses,
     replay_outbox_rows: row.outbox, final_job_status: row.status,
+    failed_job_retry: { resumed: true, idempotent: true, verified_fact_reusable: true },
     contact_review: { pre_model_stop: true, hashed_callback: true, published_selection: true, manual_provenance: true, final_status: contactState.status },
     openai_calls: 0, telegram_calls: 0, mail_transmitted: false,
   }, null, 2));

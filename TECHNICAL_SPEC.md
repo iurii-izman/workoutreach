@@ -1,7 +1,7 @@
 # Workoutreach — техническое задание
 
-> Статус: Final v1.4 — pilot contact resolution + hybrid local runtime
-> Дата: 20 июля 2026 года
+> Статус: Final v1.5 — universal-first outreach resilience
+> Дата: 28 июля 2026 года
 > Целевой каталог: `C:\Dev\workoutreach`  
 > Назначение: единый источник требований для реализации самостоятельного продукта в новом проекте и новом чате Codex.  
 > Режим происхождения: 0% donor code/data/config; 100% новая project-authored реализация.
@@ -59,14 +59,14 @@
 - Telegram Bot API `getUpdates` — локальный allowlisted ввод URL, выбор контакта, предпросмотр, подтверждение и статусы;
 - отдельный hardened Node.js service — текущий critical path: crawl, deterministic gates, OpenAI Responses API, Telegram и SMTP dispatcher;
 - PostgreSQL — единственный источник бизнес-состояния, очереди и идемпотентности;
-- OpenAI Responses API — два прямых server-side вызова со strict Structured Outputs, `store=false`, без tools;
+- OpenAI Responses API — необязательная двухэтапная персонализация со strict Structured Outputs, `store=false`, без tools; форматный повтор второго этапа ограничен одним вызовом;
 - Gmail authenticated SMTP submission — текущий owner-approved transport после ручного подтверждения; пароль приложения только в Docker Secret;
 - n8n self-hosted — локальный визуальный и будущий orchestration layer; импортированные workflow-контракты неактивны и не дублируют отправку;
 - Caddy — loopback-only HTTPS для n8n/dashboard; публичная точка входа в локальном режиме отсутствует.
 
 ## 3. Цель продукта
 
-Оператор отправляет боту только URL публичного сайта компании. Система безопасно изучает ограниченный набор страниц, находит подтверждаемый факт и опубликованные контактные адреса, создаёт персональную фразу, вставляет её в фиксированный шаблон письма и присылает полный предпросмотр в Telegram.
+Оператор отправляет боту только URL публичного сайта компании. Система безопасно изучает ограниченный набор страниц, находит опубликованные контактные адреса и всегда сначала формирует owner-approved универсальный черновик. Если необязательная двухэтапная персонализация проходит literal evidence и business gates, первый абзац заменяется персональным; её контролируемый неуспех не блокирует универсальный предпросмотр.
 
 Письмо отправляется только после явного одноразового подтверждения разрешённого пользователя. После отправки бот сообщает точный технический статус, не называя письмо «доставленным во входящие», если известно только принятие провайдером или почтовым сервером адресата.
 
@@ -116,15 +116,16 @@
 3. Система проверяет Telegram allowlist, дедупликацию обновления и безопасность URL.
 4. Система загружает ограниченный набор разрешённых страниц и извлекает чистый текст.
 5. Контактные email извлекаются детерминированно из `mailto:` и видимого текста.
-6. Первый AI-вызов выбирает подтверждаемый факт и возвращает evidence по строгой JSON Schema.
-7. Детерминированный evidence gate проверяет результат.
-8. Второй AI-вызов получает только принятый факт и утверждённое описание предложения, затем создаёт персональную фразу и пересечение.
-9. Второй результат проходит schema- и business-валидацию.
-10. Фиксированный шаблонизатор вставляет только разрешённые поля.
-11. Бот присылает полный предпросмотр письма, контакт, источник, проверку и предупреждения.
-12. Оператор выбирает «Отправить», «Перегенерировать» или «Отклонить».
-13. После «Отправить» система атомарно проверяет suppression и дедупликацию, создаёт outbox-запись и выполняет одну отправку.
-14. Бот обновляет статус по фактически полученным событиям.
+6. Универсальный owner-approved черновик уже доступен после contact/evidence checks и не требует модели.
+7. В режиме `optional` первый AI-вызов выбирает подтверждаемый факт и возвращает evidence по строгой JSON Schema.
+8. Детерминированный evidence gate проверяет результат.
+9. Второй AI-вызов получает только принятый факт и утверждённое описание предложения, затем создаёт персональную фразу и пересечение; форматный провал допускает один повтор только этого этапа.
+10. Второй результат проходит schema- и business-валидацию.
+11. Фиксированный шаблонизатор вставляет только `{{OPENING_PARAGRAPH}}`: прошедшую gates персональную фразу либо точный owner-approved универсальный текст.
+12. Бот присылает полный предпросмотр письма, контакт, источник, проверку и предупреждения.
+13. Оператор выбирает «Отправить», «Перегенерировать» или «Отклонить».
+14. После «Отправить» система атомарно проверяет suppression и дедупликацию, создаёт outbox-запись и выполняет одну отправку.
+15. Бот обновляет статус по фактически полученным событиям.
 
 ### 5.2. Контакт не определён однозначно
 
@@ -188,11 +189,14 @@ flowchart LR
     F --> X["Очистка текста и извлечение контактов"]
     X --> CR["Выбор published / явный manual"]
     CR --> X
+    X --> UO["Owner-approved универсальный opening"]
     X --> A1["OpenAI: выбор факта по JSON Schema"]
     A1 --> G1["Evidence gate"]
     G1 --> A2["OpenAI: персональная фраза по JSON Schema"]
     A2 --> G2["Business validation"]
-    G2 --> T["Детерминированный шаблонизатор"]
+    G2 -->|"accepted"| T["Детерминированный шаблонизатор"]
+    G2 -->|"optional failure"| UO
+    UO --> T
     T --> TG
     TG --> AP["Одноразовое подтверждение"]
     AP --> O["Transactional outbox"]
@@ -235,10 +239,10 @@ flowchart LR
 - ограниченная загрузка страниц;
 - HTML-to-text;
 - извлечение контактов;
-- OpenAI fact extraction;
-- evidence gate;
-- OpenAI phrase generation;
-- business validation;
+- сборка owner-approved универсального opening;
+- необязательный OpenAI fact extraction и evidence gate;
+- необязательный OpenAI phrase generation, один phrase-only retry и business validation;
+- детерминированный universal fallback без company-specific claims;
 - создание версии черновика;
 - вызов `03_render_review`.
 
@@ -356,16 +360,16 @@ Email извлекаются до AI-вызовов:
 - `Store=false`;
 - не использовать AI Agent, web search, function calling и иные tools;
 - имя модели хранить в конфигурации, а фактический model ID — в каждой записи анализа;
-- quality reference для первоначального manual eval: актуальный alias `gpt-5.6` (Sol на момент утверждения ТЗ);
-- `gpt-5.6-terra` является production-кандидатом на снижение стоимости только после сравнения на том же представительном eval-наборе: без регрессии по evidence/factuality hard gates и без роста неподтверждённых утверждений;
-- fact extraction и phrase generation имеют независимые model settings, но по умолчанию сохраняют quality reference до одинакового representative eval;
+- исторический quality reference: alias `gpt-5.6` (Sol);
+- owner-approved production default с 28 июля 2026 года: `gpt-5.6-luna` для обоих высокообъёмных строго ограниченных model roles;
+- fact extraction и phrase generation сохраняют независимые model settings; изменение роли требует одинакового representative eval;
 - для уникальных company payloads implicit prompt-cache breakpoint отключён через explicit cache mode без breakpoint; cache включается только при измеримом повторном prefix reuse;
 - ChatGPT subscription/web-session не используется как API credential: приложение переиспользует только существующий project API key из Docker Secret;
 - reasoning effort задаётся явно, начинается с минимального уровня, прошедшего eval, и не повышается без измеримого улучшения;
 - конкретную модель или effort разрешается менять только отдельным конфигурационным изменением после одинакового eval, с фиксацией качества, latency и стоимости;
 - prompt, schema и offer profile версионируются, их hashes сохраняются с результатом.
 
-### 10.2. Два независимых вызова
+### 10.2. Необязательные независимые вызовы
 
 Вызов A получает размеченные фрагменты страниц (`source_id` + text) и выбирает один конкретный факт. Он не получает почтовые credentials, шаблон письма или право формировать действие.
 
@@ -378,6 +382,14 @@ Email извлекаются до AI-вызовов:
 - язык и ограничения персональной фразы.
 
 Вызов B не получает полный сайт. Это уменьшает влияние prompt injection и делает результат проще для проверки.
+
+`OUTREACH_PERSONALIZATION_MODE` принимает:
+
+- `off` — только универсальный текст, ноль model calls;
+- `optional` — production default: персонализация улучшается при успехе, но не блокирует универсальный черновик;
+- `required` — диагностический/eval-режим со старым fail-closed поведением.
+
+При `PHRASE_SENTENCE_COUNT` разрешён только семантически нейтральный локальный ремонт внешних кавычек или отсутствующего конечного знака. Реальное нарушение длины, числа предложений или согласования получает один повтор только вызова B с безопасным error code без предыдущего сырого model output. Повторный провал создаёт `UNIVERSAL_FALLBACK`, а не `FAILED`.
 
 ### 10.3. Обращение с содержимым сайта
 
@@ -419,7 +431,7 @@ Refusal, incomplete output/truncation, отсутствие обязательн
 
 ## 12. Evidence gate и правила персональной фразы
 
-Результат допускается к предпросмотру только если выполнены все условия:
+Персональный первый абзац допускается к предпросмотру только если выполнены все условия:
 
 - `source_id` существует в списке реально загруженных страниц;
 - `source_excerpt` после одинаковой нормализации пробелов буквально присутствует в тексте этого source;
@@ -434,28 +446,29 @@ Refusal, incomplete output/truncation, отсутствие обязательн
 - фраза не содержит инструкций, кода, Markdown-ссылок и HTML;
 - предупреждения, требующие человека, не скрыты.
 
-Система вычисляет `word_count` самостоятельно и не доверяет числу модели. При провале любого обязательного условия письмо не собирается автоматически.
+Система вычисляет `word_count` самостоятельно и не доверяет числу модели. Провал URL, contact, suppression, attachment, template или transport safety gate остаётся fail-closed. Провал необязательной персонализации удаляет все неподтверждённые company-specific поля и собирает только точный owner-approved универсальный текст с видимым предупреждением.
 
 ## 13. Шаблон письма
 
 AI не генерирует письмо целиком. Тема, основной текст и подпись хранятся как утверждённые versioned templates. В индивидуальном пилоте до 50 вручную проверенных писем отдельная opt-out-фраза в теле письма не используется; любой отрицательный ответ вручную вносится в suppression до следующего контакта.
 
-Минимальные файлы:
+Активные файлы:
 
 ```text
-templates/email/ru/v1/subject.txt
-templates/email/ru/v1/body.txt
-templates/email/ru/v1/body.html
+templates/email/ru/v2/subject.txt
+templates/email/ru/v2/body.txt
+templates/email/ru/v2/body.html
+templates/email/ru/v2/manifest.json
 product/offer-profile.v1.yaml
 ```
 
 Разрешённые placeholders задаются allowlist. Обязательный placeholder:
 
 ```text
-{{PERSONALIZATION_PHRASE}}
+{{OPENING_PARAGRAPH}}
 ```
 
-Дополнительные placeholders допускаются только после явного описания и тестов, например `{{COMPANY_NAME}}`, `{{SENDER_NAME}}`, `{{OPT_OUT_TEXT}}`.
+Значение `OPENING_PARAGRAPH` равно либо точному `universal_opening` из owner-approved manifest, либо персональной фразе, прошедшей все gates. Других динамических placeholders активный v2 не допускает.
 
 Требования:
 
@@ -489,6 +502,7 @@ product/offer-profile.v1.yaml
 - `/usage` — UTC-day counters анализов, токенов и SMTP acceptance без приблизительной стоимости;
 - `/email <job_id> <address>` — явный ввод достоверно известного адреса с provenance `manual`;
 - `/approve <job_id>` — новый одноразовый SMTP callback для уже проверенного immutable draft;
+- `/retry <job_id>` — bounded повтор принадлежащего оператору `FAILED`-задания с reuse проверенного fact-stage, если он существует;
 - `/help` — краткая инструкция.
 
 Если найдено несколько допустимых опубликованных email, модель ещё не вызывается. Кандидаты, категория и источник сохраняются в PostgreSQL и показываются оператору; защищённые категории могут быть видимы для контекста, но не получают кнопку выбора. Callback содержит только `job_id`, database candidate ID и одноразовый nonce; nonce хранится как SHA-256, ограничен TTL и погашается атомарно. После выбора сайт загружается повторно, а опубликованный адрес обязан снова встретиться буквально и оставаться разрешённым contact-policy, иначе результат `CONTACT_SELECTION_STALE`.
@@ -611,7 +625,9 @@ Approval transaction должна одновременно:
 
 Retry policy:
 
-- fetch и OpenAI: exponential backoff с jitter только для timeout, 429 и 5xx; максимум два повтора;
+- fetch и OpenAI transport: exponential backoff с jitter только для timeout, 429 и 5xx; максимум два transport-повтора;
+- phrase business validation: один bounded model retry без повторной загрузки сайта и fact extraction;
+- `/retry WO-XXXXXX` возобновляет принадлежащее оператору `FAILED`-задание; сохранённый fact-stage повторно принимается только после проверки против заново загруженных страниц;
 - постоянные 4xx и ошибки валидации не повторяются бесконечно;
 - SMTP/API 5xx permanent rejection не повторяется;
 - temporary mail failure получает ограниченный backoff;
@@ -952,7 +968,7 @@ Gate: clean start, healthchecks, однократное применение mig
 - test Telegram bot;
 - allowlist и update idempotency;
 - safe URL/crawl/text/contact pipeline;
-- два OpenAI-вызова со Structured Outputs;
+- ноль model calls в universal-only, два в обычной персонализации и максимум три при одном phrase-validation retry;
 - evidence/business gates;
 - fixed template;
 - полный Telegram-предпросмотр;
@@ -971,7 +987,7 @@ Gate: критерии 1–9 и security tests пройдены; владеле�
 - mock transport и точные статусы.
 - локальный allowlisted Telegram `getUpdates` long polling без публичного порта или домена;
 - PostgreSQL как источник истины для update idempotency, evidence, immutable drafts и restart recovery;
-- атомарная резервация дневного бюджета анализа до OpenAI: локальная owner-approved ёмкость 40 анализов UTC/сутки, строго 2 model calls на успешный анализ;
+- атомарная резервация дневного бюджета непосредственно перед первым фактическим OpenAI-вызовом: локальная owner-approved ёмкость 40 персонализаций UTC/сутки, 2 обычных вызова и максимум 3 при одном bounded phrase retry;
 - n8n доступен локально, но не является обязательным critical path для Stage 2; публичный webhook остаётся будущей опцией.
 
 Gate: 0 дублей во всех повторных и конкурентных тестах; container restart сохраняет job/draft/action; mail transport отсутствует; тесты не расходуют OpenAI credits.
@@ -1013,7 +1029,7 @@ Gate: владелец отдельно разрешает production pilot. А�
 Предоставлены и зафиксированы для этапа 1:
 
 - точная инструкция анализа и правила персональной фразы;
-- финальная русская тема и шаблон письма с двумя динамическими полями: `{{COMPANY_NAME}}` и `{{PERSONALIZATION_PHRASE}}`;
+- финальная русская тема и owner-approved universal-first шаблон v2 с единственным ограниченным полем `{{OPENING_PARAGRAPH}}`;
 - утверждённый профиль кандидата, запрещённые claims и актуальное CV как внешний read-only asset;
 - карьерная цель, Казахстан и интеграторы Bitrix24 как первая категория адресатов;
 - OpenAI API key и Telegram test-bot token через ignored `.env`;

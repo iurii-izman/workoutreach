@@ -18,7 +18,7 @@ const STAGE2_COPY = Object.freeze({
 
 const SMTP_COPY = Object.freeze({
   start: 'Добрый день! Пришлите одним сообщением публичный URL сайта компании. Я сохраню evidence и черновик в локальном PostgreSQL. После полного preview кнопка «Отправить email» потребует одно явное подтверждение.',
-  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Если найдено несколько email — выберите опубликованный адрес кнопкой.\n3. Известный адрес можно указать явно: /email WO-XXXXXX name@example.com. Он будет помечен manual.\n4. Проверьте evidence и полный текст, затем подтвердите отправку.\n5. Автоматического retry после неизвестного результата нет.\n\nКоманды: /next, /queue, /usage, /status [WO-XXXXXX], /approve WO-XXXXXX, /help, /version.',
+  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Если найдено несколько email — выберите опубликованный адрес кнопкой.\n3. Известный адрес можно указать явно: /email WO-XXXXXX name@example.com. Он будет помечен manual.\n4. Проверьте evidence и полный текст, затем подтвердите отправку.\n5. Ошибка персонализации не блокирует универсальный черновик. Для FAILED используйте /retry WO-XXXXXX.\n6. Автоматического retry после неизвестного SMTP-результата нет.\n\nКоманды: /next, /queue, /usage, /retry WO-XXXXXX, /status [WO-XXXXXX], /approve WO-XXXXXX, /help, /version.',
   status: 'Статус: локальная отправка включена.\nOpenAI: только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: SMTP с ручным подтверждением.\nАвтоповтор: отключён.\nПубличный webhook: отсутствует.',
   version: 'Workoutreach guarded SMTP · PostgreSQL-backed review · human approval',
 });
@@ -49,6 +49,7 @@ function friendlyFailure(error) {
     NEEDS_REVIEW: 'Найдено несколько равнозначных контактов; требуется ручной выбор.',
     PHRASE_GRAMMAR_AGREEMENT: 'Фраза отклонена языковой проверкой. Попробуйте перегенерацию.',
     PHRASE_WORD_COUNT: 'Фраза отклонена из-за длины. Попробуйте перегенерацию.',
+    PHRASE_SENTENCE_COUNT: 'Персональная фраза не прошла проверку одного предложения. Универсальный черновик будет сохранён, если остальной контур безопасен.',
     ROBOTS_BLOCKED: 'robots.txt запрещает обработку этого URL.',
     ROBOTS_UNAVAILABLE: 'Не удалось безопасно проверить robots.txt.',
     MODEL_INCOMPLETE: 'Модель не завершила структурированный ответ. Попробуйте позже.',
@@ -58,6 +59,9 @@ function friendlyFailure(error) {
     MANUAL_EMAIL_INVALID: 'Ручной адрес не прошёл синтаксическую проверку. Используйте полный адрес вида name@example.com.',
     MANUAL_EMAIL_STATE_INVALID: 'Ручной адрес можно добавить только к активному заданию со статусом NEEDS_CONTACT или NEEDS_REVIEW.',
     CONTACT_SELECTION_STALE: 'Опубликованный адрес не подтвердился при повторной загрузке сайта. Выберите адрес заново.',
+    RETRY_STATE_INVALID: 'Команда /retry доступна только для задания со статусом FAILED.',
+    RETRY_EXPIRED: 'Срок хранения задания истёк; пришлите URL заново.',
+    RETRY_LIMIT: 'Лимит безопасных повторов исчерпан; пришлите URL заново.',
   };
   return `Задание безопасно остановлено.\nКод: ${result.code}\n${messages[result.code] ?? 'Проверьте URL или повторите попытку позже.'}`;
 }
@@ -138,7 +142,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     while (jobs.size > 100) jobs.delete(jobs.keys().next().value);
   }
 
-  async function executeAnalysis({ inputUrl, chatId, userId, updateId, seed, regeneration = 0, jobId = makeJobId(seed), draftVersion = regeneration + 1, begin = true, contactSelection = null }) {
+  async function executeAnalysis({ inputUrl, chatId, userId, updateId, seed, regeneration = 0, jobId = makeJobId(seed), draftVersion = regeneration + 1, begin = true, contactSelection = null, acceptedFact = null }) {
     if (stateStore && begin) {
       const started = await stateStore.beginJob({ updateId, jobId, inputUrl, userId, chatId });
       if (started.replay) {
@@ -155,6 +159,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
         seed,
         jobId,
         contactSelection,
+        acceptedFact,
         beforeModelCalls: stateStore ? () => stateStore.reserveAnalysis(jobId, draftVersion, dailyAnalysisLimit) : null,
       }));
       if (result.job_id !== jobId) throw new SafeStop('BOT_JOB_ID_MISMATCH', 'Analysis returned an unexpected job identifier');
@@ -222,6 +227,37 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
       const usage = await stateStore.getUsageSummary();
       await client.sendText(chatId, `Использование за ${usage.usage_date} UTC\nАнализы: ${usage.analyses_completed} завершено / ${usage.analyses_reserved} зарезервировано / лимит ${dailyAnalysisLimit}\nОшибки после резерва: ${usage.analyses_failed}\nТокены: вход ${usage.input_tokens}, выход ${usage.output_tokens}\nSMTP: ${usage.smtp_accepted} принято провайдером / ${usage.smtp_queued} создано / лимит ${usage.send_limit}`);
       return { ok: true, action: 'usage' };
+    }
+    if (command === 'retry') {
+      const jobId = text.match(/^\/retry(?:@[A-Za-z0-9_]+)?\s+(WO-[A-Z0-9]{6})$/iu)?.[1]?.toUpperCase();
+      if (!stateStore || !jobId) {
+        await client.sendText(chatId, 'Формат: /retry WO-XXXXXX\nКоманда повторяет только принадлежащее вам задание со статусом FAILED.');
+        return { ok: true, action: 'retry_usage' };
+      }
+      try {
+        const retry = await stateStore.prepareRetry({ jobId, userId: String(message.from.id), chatId, updateId: update.update_id });
+        if (retry.replay) {
+          await client.sendText(chatId, `#${jobId}\nЭта команда уже обработана.`);
+          return { ok: true, action: retry.result_code, idempotentReplay: true };
+        }
+        const acceptedFact = await stateStore.getResumeFact(jobId, String(message.from.id), chatId);
+        await client.sendText(chatId, `#${jobId}\nПовтор запущен${acceptedFact ? ' с последнего проверенного fact-stage' : ' с безопасной загрузки сайта'}.`);
+        return executeAnalysis({
+          inputUrl: retry.canonical_url,
+          chatId,
+          userId: String(message.from.id),
+          updateId: update.update_id,
+          seed: `telegram-update-${update.update_id}-retry-${retry.draft_version}`,
+          regeneration: retry.draft_version - 1,
+          draftVersion: retry.draft_version,
+          jobId,
+          begin: false,
+          acceptedFact,
+        });
+      } catch (error) {
+        await client.sendText(chatId, friendlyFailure(error));
+        return { ok: false, action: 'retry', ...asSafeResult(error) };
+      }
     }
     if (command === 'email') {
       const match = text.match(/^\/email(?:@[A-Za-z0-9_]+)?\s+(WO-[A-Z0-9]{6})\s+(\S+)$/iu);
@@ -344,6 +380,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
         return { ok: true, action: result.result_code, jobId };
       }
       await client.answerCallbackQuery(callback.id, { text: 'Перегенерация запущена.' });
+      const acceptedFact = await stateStore.getResumeFact(jobId, userId, chatId);
       return executeAnalysis({
         inputUrl: result.canonical_url,
         chatId,
@@ -354,6 +391,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
         draftVersion: Number(result.draft_version) + 1,
         jobId,
         begin: false,
+        acceptedFact,
       });
     }
     if (action === 'reject') {
