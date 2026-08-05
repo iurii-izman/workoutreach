@@ -28,7 +28,11 @@ export function assertLiveAnalysisRuntime(env = process.env) {
 
 export async function analyzeLiveCompany({ root, inputUrl, env = process.env, seed = inputUrl, jobId = undefined, onModelEnvelope = null, beforeModelCalls = null, modelAdapter = null, contactSelection = null, acceptedFact = null } = {}) {
   assertLiveAnalysisRuntime(env);
-  if ((env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
+  const personalizationMode = env.OUTREACH_PERSONALIZATION_MODE ?? 'off';
+  if (!['off', 'optional', 'required'].includes(personalizationMode)) throw new SafeStop('PERSONALIZATION_MODE_INVALID', 'Personalization mode must be off, optional or required');
+  if (personalizationMode !== 'off' && (env.OPENAI_MODE ?? 'stub') !== 'live-eval') {
+    throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval when personalization is enabled');
+  }
 
   const offerProfile = await loadOfferProfile(root);
   const attachment = await validateConfiguredCv(env);
@@ -42,7 +46,9 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
       timeoutMs: positiveNumber(env.PAGE_TIMEOUT_MS, 10_000, 'PAGE_TIMEOUT_MS'),
       maxBytes: positiveNumber(env.MAX_RESPONSE_BYTES, 2_097_152, 'MAX_RESPONSE_BYTES'),
     }),
-    modelAdapter: modelAdapter ?? createOpenAIAdapter({ apiKey: env.OPENAI_API_KEY }),
+    modelAdapter: personalizationMode === 'off'
+      ? modelAdapter
+      : (modelAdapter ?? createOpenAIAdapter({ apiKey: env.OPENAI_API_KEY })),
     offerProfile,
     attachment,
     crawlLimits: {
@@ -71,7 +77,7 @@ export async function analyzeLiveCompany({ root, inputUrl, env = process.env, se
     beforeModelCalls,
     contactSelection,
     acceptedFact,
-    personalizationMode: env.OUTREACH_PERSONALIZATION_MODE ?? 'optional',
-    mode: 'guarded-live-eval',
+    personalizationMode,
+    mode: personalizationMode === 'off' ? 'guarded-universal-only' : 'guarded-live-eval',
   });
 }

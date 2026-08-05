@@ -11,21 +11,21 @@ npm run local:status
 
 A healthy status requires PostgreSQL, n8n, Caddy, dashboard and the bot to be healthy, migrations 004–012 to exist, no public Telegram webhook and no public PostgreSQL port. Caddy listens only on `127.0.0.1:443`. Do not run a second poller for the same bot token. n8n remains an inactive visual/orchestration layer; the Node.js bot is the only active analysis/send path.
 
-## Credit guard
+## Universal-only cost boundary
 
-`DAILY_ANALYSIS_LIMIT=40` allows at most forty new analyses per UTC day. Each accepted analysis reserves exactly two OpenAI requests immediately before the first model call. Contact-only stops (`NEEDS_CONTACT`/`NEEDS_REVIEW`) reserve nothing. Repeated Telegram updates do not reserve twice; failed/reserved model work still counts conservatively for that day. `LOCAL_OPENAI_MAX_OUTPUT_TOKENS=1200` is the per-call local output ceiling. Use `/usage` for current UTC-day counters.
+The active bot is hard-coded to `OUTREACH_PERSONALIZATION_MODE=off`, receives no OpenAI secret and makes zero model calls. `/usage` remains useful for SMTP acceptance and queue counters; its model counters must stay at zero for new universal-only work.
 
 ## Operator commands and contact resolution
 
 - `/next` — oldest active job that needs an operator decision;
 - `/queue` — bounded actionable queue and counts by state;
-- `/usage` — model and SMTP counters without guessed cost;
+- `/usage` — zero-model and SMTP counters without guessed delivery status;
 - `/email WO-XXXXXX name@example.com` — explicit known address only for `NEEDS_CONTACT`/`NEEDS_REVIEW`;
 - `/status WO-XXXXXX` and `/approve WO-XXXXXX` — inspect and reopen approval for an immutable ready draft.
 
-For several published addresses, verify category and source URL before using a button. Protected categories are visible but not selectable. A button contains only candidate ID and a hashed one-time-token counterpart; the site is crawled again and the address must still be literally present before OpenAI runs. A manual address is visibly/audit-marked `manual`, is never guessed and is not sent to the model.
+For several published addresses, verify category and source URL before using a button. Protected categories are visible but not selectable. A button contains only candidate ID and a hashed one-time-token counterpart; the site is crawled again and the address must still be literally present before the fixed draft is created. A manual address is visibly/audit-marked `manual` and is never guessed.
 
-Automated tests, `npm run verify` and Docker smoke use fixtures/stubs and make zero live OpenAI requests. Credits are spent only after the allowlisted owner sends a valid company URL to the running bot.
+Automated tests, `npm run verify`, Docker smoke and the active bot make zero OpenAI requests.
 
 ## Restart and stop
 

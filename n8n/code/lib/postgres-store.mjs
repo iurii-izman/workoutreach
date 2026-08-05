@@ -161,7 +161,7 @@ export class PostgresBotStore {
 
       const deterministicModel = result.analysis.personalization_mode === 'PERSONALIZED'
         ? 'reused-verified-stage'
-        : 'deterministic-universal-opening';
+        : 'deterministic-fixed-universal-email-v3';
       const analysisRows = [
         {
           stage: 'fact',
@@ -226,7 +226,10 @@ export class PostgresBotStore {
 
       const callbacks = {};
       const sendAction = this.mailEnabled ? 'smtp_send' : 'mock_send';
-      for (const action of [sendAction, 'regenerate', 'reject']) {
+      const reviewActions = result.analysis.personalization_mode === 'UNIVERSAL_ONLY'
+        ? [sendAction, 'reject']
+        : [sendAction, 'regenerate', 'reject'];
+      for (const action of reviewActions) {
         const token = await client.query(
           'SELECT callback_data,expires_at FROM workoutreach.issue_local_review_token($1,$2,$3,$4,$5)',
           [result.job_id, version, action, asInteger(userId, 'telegram_user_id'), asInteger(chatId, 'telegram_chat_id')],
@@ -257,7 +260,7 @@ export class PostgresBotStore {
         [result.job_id, result.analysis.personalization_mode, result.evidence.personalization_failure_code ?? null, result.evidence.model_call_count ?? 0],
       );
       await client.query('COMMIT');
-      return { callbacks: { send: callbacks[sendAction], regenerate: callbacks.regenerate, reject: callbacks.reject }, draftVersion: version, mailEnabled: this.mailEnabled };
+      return { callbacks: { send: callbacks[sendAction], regenerate: callbacks.regenerate ?? null, reject: callbacks.reject }, draftVersion: version, mailEnabled: this.mailEnabled };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

@@ -9,7 +9,6 @@ const target = join(root, '.secrets');
 await mkdir(target, { recursive: true });
 
 const required = {
-  openai_api_key: process.env.OPENAI_API_KEY,
   telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN,
   telegram_allowed_user_ids: process.env.ALLOWED_TELEGRAM_USER_IDS,
   telegram_allowed_chat_ids: process.env.ALLOWED_TELEGRAM_CHAT_IDS,
@@ -18,7 +17,6 @@ const required = {
   mail_from_address: process.env.MAIL_FROM_ADDRESS || 'disabled',
 };
 
-if (!/^sk-[A-Za-z0-9_-]{20,}$/u.test(String(required.openai_api_key ?? ''))) throw new SafeStop('OPENAI_CREDENTIAL_MISSING', 'A usable OpenAI API key is required in ignored .env');
 if (!/^\d+:[A-Za-z0-9_-]{20,}$/u.test(String(required.telegram_bot_token ?? ''))) throw new SafeStop('TELEGRAM_CREDENTIAL_MISSING', 'A usable Telegram bot token is required in ignored .env');
 if (!/^-?\d+(,-?\d+)*$/u.test(String(required.telegram_allowed_user_ids ?? '')) || !/^-?\d+(,-?\d+)*$/u.test(String(required.telegram_allowed_chat_ids ?? ''))) {
   throw new SafeStop('TELEGRAM_ALLOWLIST_INVALID', 'Numeric Telegram allowlists are required in ignored .env');
@@ -64,4 +62,4 @@ try {
 }
 await chmod(hmacPath, 0o600);
 
-console.log(JSON.stringify({ ok: true, target: '.secrets', runtime_secret_files: 9, plaintext_exposed: false }));
+console.log(JSON.stringify({ ok: true, target: '.secrets', runtime_secret_files: Object.keys(required).length + 2, plaintext_exposed: false, openai_mounted: false }));

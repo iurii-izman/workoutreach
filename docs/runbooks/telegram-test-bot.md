@@ -2,8 +2,8 @@
 
 ## Safety prerequisites
 
-- `.env` is ignored and contains valid OpenAI/Telegram credentials, one user/chat allowlist and the validated external CV configuration.
-- `OPENAI_MODE=live-eval` and `TELEGRAM_MODE=live-preview`.
+- `.env` is ignored and contains a valid Telegram credential, one user/chat allowlist and the validated external CV configuration.
+- `OUTREACH_PERSONALIZATION_MODE=off` and `TELEGRAM_MODE=live-preview`.
 - `MAIL_TRANSPORT=disabled` and `LIVE_SEND_ENABLED=false`.
 - Telegram webhook URL is empty.
 
@@ -29,8 +29,8 @@ npm run bot:stop
 
 1. Send one public company URL as the whole Telegram message.
 2. Wait for `Принято · #WO-...` and the typing indicator.
-3. Review the recipient, phone decision, evidence, phrase, attachment status and full email.
-4. Use `Перегенерировать` at most twice or `Отклонить`.
+3. Review the recipient, contact source, attachment status and full fixed email.
+4. Use `Отклонить` if the recipient is unsuitable; the fixed letter has no regeneration action.
 5. `Отправить` only displays the Stage-1 block and cannot transmit email.
 
 ## Troubleshooting
@@ -39,4 +39,4 @@ npm run bot:stop
 - `TELEGRAM_WEBHOOK_CONFLICT`: stop and investigate the webhook before changing modes.
 - `TELEGRAM_API_ERROR` with conflict: another `getUpdates` process is using the token.
 - `degraded` heartbeat: inspect `.runtime/telegram-bot.stderr.log`; logs contain safe codes, not tokens or raw API payloads.
-- Old regeneration button after restart: resend the company URL; the expired context is intentionally not guessed.
+- Old regeneration buttons belong to historical personalized drafts and are not issued for new universal-only jobs.

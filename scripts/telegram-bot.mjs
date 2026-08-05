@@ -99,7 +99,8 @@ process.on('SIGTERM', requestStop);
 
 async function main() {
   if ((process.env.TELEGRAM_MODE ?? 'stub') !== 'live-preview') throw new SafeStop('TELEGRAM_MODE_BLOCKED', 'TELEGRAM_MODE must be live-preview');
-  if ((process.env.OPENAI_MODE ?? 'stub') !== 'live-eval') throw new SafeStop('OPENAI_MODE_BLOCKED', 'OPENAI_MODE must be live-eval');
+  const personalizationMode = process.env.OUTREACH_PERSONALIZATION_MODE ?? 'off';
+  if (personalizationMode !== 'off') throw new SafeStop('PERSONALIZATION_FROZEN', 'The active Telegram runtime is fixed to universal-only content');
   const liveSendEnabled = process.env.LIVE_SEND_ENABLED?.toLowerCase() === 'true';
   const mailTransport = process.env.MAIL_TRANSPORT ?? 'disabled';
   if ((liveSendEnabled && mailTransport !== 'smtp') || (!liveSendEnabled && mailTransport !== 'disabled')) throw new SafeStop('MAIL_CONFIG_INVALID', 'Mail runtime must be either disabled or explicitly enabled with SMTP');
@@ -113,7 +114,7 @@ async function main() {
     stateStore = new PostgresBotStore({
       pool: createPostgresPoolFromEnv(process.env),
       suppressionHmacKey: process.env.SUPPRESSION_HMAC_KEY,
-      modelId: process.env.OPENAI_MODEL ?? 'gpt-5.6-luna',
+      modelId: 'deterministic-universal-v3',
       mailEnabled: liveSendEnabled,
     });
     await stateStore.verifyReady();
@@ -149,7 +150,7 @@ async function main() {
   });
   let offset = await readOffset();
   await writeStatus('running', { offset_configured: Number.isSafeInteger(offset) });
-  console.log(JSON.stringify({ event: 'telegram_bot_started', ok: true, mail_transport: mailTransport }));
+  console.log(JSON.stringify({ event: 'telegram_bot_started', ok: true, mail_transport: mailTransport, content_mode: 'fixed-universal', openai_mounted: false }));
 
   while (!stopping) {
     let updates;

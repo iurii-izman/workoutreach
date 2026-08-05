@@ -13,6 +13,7 @@ try {
     fetcher: await createFixtureFetcher(root, 'synthetic-company'),
     modelAdapter: await createModelStub(root, 'synthetic-company'),
     offerProfile: await loadOfferProfile(root, 'fixtures/offer-profile.synthetic-eval.v1.yaml'),
+    personalizationMode: 'off',
     seed: 'telegram-update-1001',
   });
   await mkdir(join(root, 'artifacts/evidence'), { recursive: true });

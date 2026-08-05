@@ -73,10 +73,16 @@ async function updateIgnoredEnv(userId, chatId) {
 }
 
 try {
-  const openAiKey = requireFormat(process.env.OPENAI_API_KEY, /^sk-[A-Za-z0-9_-]{32,}$/u, 'OPENAI_CREDENTIAL_FORMAT', 'OPENAI_API_KEY has an invalid format');
+  const personalizationMode = process.env.OUTREACH_PERSONALIZATION_MODE ?? 'off';
+  if (!['off', 'optional', 'required'].includes(personalizationMode)) throw new SafeStop('PERSONALIZATION_MODE_INVALID', 'OUTREACH_PERSONALIZATION_MODE must be off, optional or required');
+  const openAiKey = personalizationMode === 'off'
+    ? null
+    : requireFormat(process.env.OPENAI_API_KEY, /^sk-[A-Za-z0-9_-]{32,}$/u, 'OPENAI_CREDENTIAL_FORMAT', 'OPENAI_API_KEY has an invalid format');
   const telegramToken = requireFormat(process.env.TELEGRAM_BOT_TOKEN, /^\d+:[A-Za-z0-9_-]{20,}$/u, 'TELEGRAM_CREDENTIAL_FORMAT', 'TELEGRAM_BOT_TOKEN has an invalid format');
   const [openai, bot, webhook, cv] = await Promise.all([
-    openAiCheck(openAiKey),
+    personalizationMode === 'off'
+      ? Promise.resolve({ enabled: false, authenticated: false, check: 'skipped_universal_only', billed_model_call: false })
+      : openAiCheck(openAiKey),
     telegramCall(telegramToken, 'getMe'),
     telegramCall(telegramToken, 'getWebhookInfo'),
     validateConfiguredCv(),

@@ -1,6 +1,6 @@
 # Workoutreach
 
-Workoutreach is a strict-greenfield, human-reviewed career-outreach product for Bitrix24 integrators. Its current local runtime is a hardened Node.js Telegram long-polling service backed by PostgreSQL; it performs the crawl, deterministic contact/evidence gates, universal-first drafting, optional two-stage OpenAI personalization, review and guarded Gmail SMTP dispatch. n8n is installed as an optional visual orchestration layer with six inactive credential-free workflow contracts, but it is not a second sender and is not on the current critical path.
+Workoutreach is a strict-greenfield, human-reviewed career-outreach product for Bitrix24 partners. Its current local runtime is a hardened Node.js Telegram long-polling service backed by PostgreSQL; it performs bounded public-site crawling, deterministic published-contact discovery, fixed universal drafting, review and guarded Gmail SMTP dispatch. n8n is installed as an optional visual orchestration layer with six inactive credential-free workflow contracts, but it is not a second sender and is not on the current critical path.
 
 The project also includes a local read-mostly operator dashboard. It is deliberately not a CRM or a send channel: it shows company-level delivery/engagement state and permits only guarded manual engagement updates.
 
@@ -8,13 +8,13 @@ The project also includes a local read-mostly operator dashboard. It is delibera
 
 ## Current safety state
 
-- OpenAI: deterministic stub in CI/default dry-run; the owner runtime uses `gpt-5.6-luna` through the Responses API with strict Structured Outputs, explicit low effort, `store=false` and no tools. Personalization is optional and its failure cannot authorize or block the universal template. A deterministic perspective gate keeps company facts and first-person candidate capabilities correctly attributed and rejects vague “relevance” conclusions.
+- OpenAI: frozen outside the active runtime. The production bot is hard-coded to universal-only mode, makes zero model calls and does not receive an OpenAI API key. Versioned model code remains only for inactive evaluation history.
 - Telegram: stub by default; an explicit `--telegram` may send only the preview to an allowlisted test chat.
 - Mail: guarded Gmail SMTP adapter and at-most-once queue implemented. The repository/CI default is disabled; the owner runtime may enable it only after the owner-only self-test. The app password exists only as a Docker Secret, never in `.env` or Git.
-- Template and candidate profile: owner-approved and versioned; active v2 exposes only one reviewed opening paragraph, which is either the exact universal text or a fully gated personalized variant. Template eligibility alone cannot enable the disabled-by-default transport.
+- Template and candidate profile: owner-approved and versioned; active v3 is a byte-stable Russian subject and body with zero dynamic placeholders. Template eligibility alone cannot enable the disabled-by-default transport.
 - CV: external read-only PDF validated by filename, signature, size and SHA-256; never tracked or provided to the model.
 - Test data: synthetic `.example` fixtures with documented provenance and no PII.
-- Model budget: owner-approved ceiling `DAILY_ANALYSIS_LIMIT=40` personalization attempts per UTC day. Universal-only drafts consume zero model calls; normal personalization uses two calls and one bounded phrase-validation retry may raise a draft to three. Contact-only stops consume zero model calls.
+- Model budget: the active runtime consumes zero model calls and does not reserve model budget.
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ The dry-run prints the complete Russian Telegram review payload and writes machi
 
 ## Local secret setup and guarded live preview
 
-`.env` is ignored. It may contain `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, the external CV path/hash and non-secret allowlists. Verify them without a billed model call:
+`.env` is ignored. The active runtime needs the Telegram token, external CV path/hash and allowlists; an existing OpenAI key may remain locally for future evaluation but is neither required nor mounted into the bot. Verify the active credentials without a billed model call:
 
 ```powershell
 npm run credentials:check
@@ -46,7 +46,7 @@ To populate the allowlist, send `/start` to the test bot from the intended priva
 npm run credentials:allowlist
 ```
 
-Run exactly one company through live OpenAI analysis without transmitting the preview:
+Run exactly one company through the universal-only live pipeline without transmitting the preview:
 
 ```powershell
 npm run live:preview -- https://company.example/
@@ -63,7 +63,7 @@ npm run local:start
 npm run local:status
 ```
 
-The bot accepts one company URL and returns a complete live preview. Jobs, evidence, contacts, analyses, immutable draft versions and review actions survive process/container restarts. When several published emails are found, Telegram shows each category and source URL and requires an owner selection backed by a hashed one-time token. A known address can be supplied only through `/email WO-XXXXXX name@example.com`; it is stored with explicit `manual` provenance and is never sent to the model. A model/format failure falls back to the owner-approved universal opening instead of discarding the draft. `Перегенерировать` reuses a freshly revalidated fact stage where possible and is limited to two explicit attempts, while every real send requires a separate one-time approval.
+The bot accepts one company URL and returns a complete live preview of the same fixed universal letter. Jobs, sources, contacts, analyses, immutable draft versions and review actions survive process/container restarts. When several published emails are found, Telegram shows each category and source URL and requires an owner selection backed by a hashed one-time token. A known address can be supplied only through `/email WO-XXXXXX name@example.com`; it is stored with explicit `manual` provenance. No site or contact data is sent to a model. Fixed drafts have no regeneration action, while every real send requires a separate one-time approval.
 
 Operational commands:
 
@@ -77,7 +77,7 @@ Use `npm run local:stop` to stop containers without deleting their named volumes
 
 Before real company work, follow [the pilot operations runbook](docs/runbooks/pilot-operations.md). Treat 50 as a reviewed quality dataset, not a one-day send batch; actual delivery ramps from 5 to 10 to 20 only after manual reply/failure checks.
 
-The owner-approved local capacity is `DAILY_ANALYSIS_LIMIT=40`, with zero calls for universal-only, two for normal personalization and at most three after one phrase-only validation retry. The SMTP ceiling is 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke always use fixtures/stubs and make zero OpenAI calls.
+The active runtime always uses zero model calls. The SMTP ceiling remains 30 owner-approved messages per UTC day; every message still requires explicit Telegram approval plus database suppression and idempotency checks. Tests, verification and Docker smoke make zero OpenAI calls.
 
 ## Stage the Bitrix24 Kazakhstan catalog
 
@@ -144,7 +144,7 @@ npm run smoke:clean-clone
 - repeatable database backup/restore smoke verification.
 - PostgreSQL-backed allowlisted Telegram long polling with update deduplication and restart recovery;
 - immutable page/contact/analysis/draft persistence and one-time mock-send/regenerate/reject callbacks;
-- database-atomic daily model-analysis reservation before any OpenAI request.
+- historical database-atomic model-budget reservation retained for inactive eval compatibility; active jobs reserve nothing.
 - durable pre-model contact review with published-source selection and explicit manual provenance;
 - PostgreSQL-backed `/next`, `/queue` and `/usage` operator commands.
 - guarded Gmail SMTP transport with a database-enforced 30/day ceiling, CV revalidation, explicit one-time approval and no automatic retry after ambiguous outcomes;
@@ -154,7 +154,7 @@ npm run smoke:clean-clone
 
 ## Intentionally blocked
 
-Do not add real keys merely to make CI green. Live OpenAI evaluation requires the ignored local secret configuration and an explicit command. Telegram requires a test token and explicit user/chat allowlist. Repository/CI SMTP defaults remain disabled; owner activation requires the Gmail setup and owner-only self-test. Provider-policy confirmation and reply/bounce/complaint ingestion remain pilot scaling gates.
+Do not add real keys merely to make CI green. The active bot must not receive an OpenAI key. Telegram requires a test token and explicit user/chat allowlist. Repository/CI SMTP defaults remain disabled; owner activation requires the Gmail setup and owner-only self-test. Provider-policy confirmation and reply/bounce/complaint ingestion remain pilot scaling gates.
 
 The public/webhook n8n operator adapter, provider event processing and Stages 4–5 are not activated. Local runtime deliberately uses long polling; a server/domain becomes relevant only for later 24/7 hosting or a webhook deployment. Reply/bounce/complaint ingestion remains a pilot gate, so volume should ramp gradually even though the hard SMTP ceiling is 30/day.
 

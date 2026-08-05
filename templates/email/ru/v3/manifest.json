@@ -1,0 +1,21 @@
+{
+  "version": "email-ru-career-v3",
+  "locale": "ru",
+  "campaign_type": "career_outreach",
+  "sendable": true,
+  "owner_approved": true,
+  "content_policy": "fixed_universal_no_placeholders",
+  "universal_opening": "Я системный и бизнес-аналитик с 6+ годами опыта работы с Bitrix24 и CRM. Участвовал в 25+ внедрениях. Сейчас рассматриваю удалённую штатную работу или проектное сотрудничество с партнёром Bitrix24 и готов адаптироваться к часовому поясу команды.",
+  "allowed_placeholders": [],
+  "required_placeholders": [],
+  "attachment": {
+    "required": true,
+    "filename": "Iurii_Izman_CV_Bitrix24_AI.pdf",
+    "mime_type": "application/pdf",
+    "source": "external_read_only_runtime_asset",
+    "path_env": "CV_ATTACHMENT_PATH",
+    "sha256_env": "CV_ATTACHMENT_SHA256",
+    "tracked_in_git": false
+  },
+  "notice": "OWNER-APPROVED FIXED UNIVERSAL TEMPLATE; NO PERSONALIZATION; NO MODEL CALLS; TRANSMISSION REQUIRES EXPLICIT SMTP ACTIVATION AND HUMAN APPROVAL"
+}

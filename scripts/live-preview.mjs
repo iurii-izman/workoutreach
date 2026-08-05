@@ -36,7 +36,7 @@ try {
 
   await writeFile(join(root, 'artifacts/evidence/live-preview.json'), `${JSON.stringify({ ...result, telegram }, null, 2)}\n`, 'utf8');
   console.log(result.telegram_preview.text);
-  console.log('\nLIVE EVAL SAFETY');
+  console.log('\nLIVE UNIVERSAL SAFETY');
   console.log(JSON.stringify({ job_id: result.job_id, model: result.evidence.fact_model?.model ?? null, telegram, mail_transmitted: false, outbox_created: false }, null, 2));
 } catch (error) {
   console.error(JSON.stringify(asSafeResult(error), null, 2));

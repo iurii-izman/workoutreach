@@ -160,7 +160,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
 
   const hostname = new URL(crawl.root).hostname;
   const contracts = await loadModelContracts(root);
-  const template = await loadTemplate(root);
+  const template = await loadTemplate(root, personalizationMode === 'off' ? 'v3' : 'v2');
   const factEnvelopes = [];
   const phraseEnvelopes = [];
   const phraseRequests = [];
@@ -276,7 +276,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
       confidence: null,
       decision: 'READY_FOR_REVIEW',
       warnings: personalizationMode === 'off'
-        ? ['PERSONALIZATION_DISABLED']
+        ? []
         : ['PERSONALIZATION_SKIPPED', `PERSONALIZATION_REASON_${personalizationFailureCode ?? 'UNAVAILABLE'}`],
     };
   }
@@ -284,9 +284,12 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
   if (crawl.skippedPages.some((page) => page.code === 'FETCH_TIMEOUT')) aggregate.warnings.push('OPTIONAL_PAGE_TIMEOUT_SKIPPED');
   assertSchema(contracts.validateAggregate, aggregate, 'AGGREGATE_SCHEMA_INVALID');
 
-  const draft = renderDraft(template, {
-    OPENING_PARAGRAPH: aggregate.personalization_phrase,
-  });
+  const draft = renderDraft(
+    template,
+    template.manifest.allowed_placeholders.includes('OPENING_PARAGRAPH')
+      ? { OPENING_PARAGRAPH: aggregate.personalization_phrase }
+      : {},
+  );
   if (attachment) draft.attachment = attachment;
   const source = pages.find((page) => page.source_id === aggregate.source_id);
   const warnings = [...aggregate.warnings, template.manifest.notice];
@@ -320,7 +323,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
       fact_prompt_version: factRequest?.metadata.prompt_version ?? 'universal-source.v1',
       fact_prompt_sha256: factRequest?.metadata.prompt_sha256 ?? sha256('universal-source.v1'),
       fact_schema_sha256: factRequest?.metadata.schema_sha256 ?? sha256(stableJson(contracts.factSchema)),
-      phrase_prompt_version: phraseRequest?.metadata.prompt_version ?? 'universal-opening.v1',
+      phrase_prompt_version: phraseRequest?.metadata.prompt_version ?? 'fixed-universal-email.v3',
       phrase_prompt_sha256: phraseRequest?.metadata.prompt_sha256 ?? sha256(template.manifest.universal_opening),
       phrase_schema_sha256: phraseRequest?.metadata.schema_sha256 ?? sha256(stableJson(contracts.phraseSchema)),
       aggregate_schema_version: 'analysis-result.v2',
@@ -330,7 +333,7 @@ export async function analyzeDryRun({ root, inputUrl, fetcher, modelAdapter, off
       template_sha256: draft.template_sha256,
       source_content_sha256: source.content_sha256,
       evidence_checks: evidence?.checks ?? ['loaded_source', 'contact_provenance', 'no_synthesized_fact'],
-      business_checks: business?.checks ?? ['owner_approved_universal_opening', 'template_separation'],
+      business_checks: business?.checks ?? ['owner_approved_fixed_universal_email', 'zero_dynamic_placeholders'],
       fact_model: acceptedFact ? { model: 'reused-verified-fact', usage: null } : mergeModelMetadata(factEnvelopes),
       phrase_model: mergeModelMetadata(phraseEnvelopes),
       model_attempted: modelReserved,

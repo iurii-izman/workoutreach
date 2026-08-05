@@ -94,20 +94,28 @@ test('business gate recomputes word count and validates claim IDs', () => {
   assert.throws(() => businessGate({ ...phrase, offer_claim_ids: ['unknown'] }, offer), { code: 'OFFER_CLAIM_UNKNOWN' });
 });
 
-test('template escapes HTML values and is owner-approved for guarded sending', async () => {
+test('active template is the exact owner-approved universal letter with no dynamic placeholders', async () => {
   const root = new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1));
   const template = await loadTemplate(decodeURIComponent(root));
-  const draft = renderDraft(template, { OPENING_PARAGRAPH: '<b>безопасная фраза</b>' });
-  assert.match(draft.body_html, /&lt;b&gt;безопасная фраза&lt;\/b&gt;/u);
+  const draft = renderDraft(template, {});
   assert.equal(draft.sendable, true);
-  assert.equal(template.manifest.version, 'email-ru-career-v2');
-  assert.deepEqual(template.manifest.allowed_placeholders, ['OPENING_PARAGRAPH']);
-  assert.match(template.manifest.universal_opening, /^Я помогаю интеграторам Bitrix24/u);
-  assert.doesNotMatch(draft.body_text, /Я системный и бизнес-аналитик с более чем/u);
-  assert.doesNotMatch(draft.body_text, /В проектах я обследую процессы|проектирую интеграции|сопровождаю решения до запуска/u);
-  assert.match(draft.body_text, /Комфортно работаю на стыке бизнеса и разработки/u);
+  assert.equal(template.manifest.version, 'email-ru-career-v3');
+  assert.deepEqual(template.manifest.allowed_placeholders, []);
+  assert.equal(draft.subject, 'Системный аналитик Bitrix24 — сотрудничество');
+  assert.match(draft.body_text, /^Добрый день!\s+Я системный и бизнес-аналитик с 6\+ годами/u);
+  assert.match(draft.body_text, /Подскажите, может ли мой опыт быть полезен вашей команде сейчас или в ближайших проектах\?/u);
+  assert.doesNotMatch(draft.body_text, /\{\{|Казахстан|ПЕРСОНАЛЬНАЯ/u);
+  assert.doesNotMatch(draft.body_html, /\{\{|Казахстан|ПЕРСОНАЛЬНАЯ/u);
   assert.doesNotMatch(draft.body_text, /Если такие обращения|больше не буду писать/u);
   assert.doesNotMatch(draft.body_html, /Если такие обращения|больше не буду писать/u);
+  assert.throws(() => renderDraft(template, { OPENING_PARAGRAPH: 'нельзя' }), { code: 'TEMPLATE_VALUE_UNKNOWN' });
+});
+
+test('frozen v2 template still escapes its historical eval-only opening value', async () => {
+  const root = new URL('../../', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, (match) => match.slice(1));
+  const template = await loadTemplate(decodeURIComponent(root), 'v2');
+  const draft = renderDraft(template, { OPENING_PARAGRAPH: '<b>безопасная фраза</b>' });
+  assert.match(draft.body_html, /&lt;b&gt;безопасная фраза&lt;\/b&gt;/u);
 });
 
 test('business gate enforces the two-sentence bridge, one claim and a hard maximum of 35 words', () => {

@@ -8,7 +8,6 @@ read_secret() {
   export "$variable=$value"
 }
 
-read_secret OPENAI_API_KEY /run/secrets/openai_api_key
 read_secret TELEGRAM_BOT_TOKEN /run/secrets/telegram_bot_token
 read_secret WORKOUTREACH_DB_PASSWORD /run/secrets/business_db_password
 read_secret SUPPRESSION_HMAC_KEY /run/secrets/suppression_hmac_key

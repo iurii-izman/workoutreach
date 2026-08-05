@@ -7,9 +7,18 @@ export function renderTelegramPreview({ jobId, siteUrl, recipient, phone, analys
     ? `${draft.attachment.filename} (проверено)`
     : `${draft.attachment?.filename ?? 'не настроено'} (не проверено)`;
   const personalized = analysis.personalization_mode === 'PERSONALIZED';
+  const universalOnly = analysis.personalization_mode === 'UNIVERSAL_ONLY';
   const openingLabel = personalized ? 'ПЕРВЫЙ АБЗАЦ · ПЕРСОНАЛЬНЫЙ' : 'ПЕРВЫЙ АБЗАЦ · УНИВЕРСАЛЬНЫЙ';
   const factText = analysis.fact ?? 'не использовался — универсальный текст не содержит фактов о компании';
   const overlapText = analysis.overlap ?? 'не требуется для owner-approved универсального текста';
+  const analysisText = universalOnly
+    ? 'РЕЖИМ\nФиксированное универсальное письмо · OpenAI-вызовы: 0\n\n'
+    : `${openingLabel}\n${analysis.personalization_phrase}\n\n` +
+      `ИСТОЧНИК\n${source.title || source.source_type}\n${source.source_url}\n${analysis.source_excerpt}\n\n` +
+      `ПРОВЕРКА\nРежим: ${analysis.personalization_mode}\n` +
+      `Факт: ${factText}\n` +
+      `Пересечение с предложением: ${overlapText}\n` +
+      `Длина: ${analysis.word_count} слов\n`;
   const text = `#${jobId} · ГОТОВО К ПРОВЕРКЕ (DRY-RUN)\n\n` +
     `Компания: ${analysis.company_name}\n` +
     `Сайт: ${siteUrl}\n` +
@@ -17,12 +26,7 @@ export function renderTelegramPreview({ jobId, siteUrl, recipient, phone, analys
     `Источник адреса: ${recipient.source_url} (${recipient.source_id})\n\n` +
     `Телефон: ${phoneText}\n` +
     `Вложение: ${attachmentText}\n\n` +
-    `${openingLabel}\n${analysis.personalization_phrase}\n\n` +
-    `ИСТОЧНИК\n${source.title || source.source_type}\n${source.source_url}\n${analysis.source_excerpt}\n\n` +
-    `ПРОВЕРКА\nРежим: ${analysis.personalization_mode}\n` +
-    `Факт: ${factText}\n` +
-    `Пересечение с предложением: ${overlapText}\n` +
-    `Длина: ${analysis.word_count} слов\n` +
+    analysisText +
     `Предупреждения: ${warningText}\n\n` +
     `ТЕМА\n${draft.subject}\n\n` +
     `ПИСЬМО\n${draft.body_text}`;
@@ -32,11 +36,16 @@ export function renderTelegramPreview({ jobId, siteUrl, recipient, phone, analys
     transmitted: false,
     text,
     reply_markup: {
-      inline_keyboard: [
-        [{ text: 'Отправить (mock)', callback_data: `mock_send:${jobId}` }],
-        [{ text: 'Перегенерировать', callback_data: `mock_regenerate:${jobId}` }],
-        [{ text: 'Отклонить', callback_data: `mock_reject:${jobId}` }],
-      ],
+      inline_keyboard: universalOnly
+        ? [
+          [{ text: 'Отправить (mock)', callback_data: `mock_send:${jobId}` }],
+          [{ text: 'Отклонить', callback_data: `mock_reject:${jobId}` }],
+        ]
+        : [
+          [{ text: 'Отправить (mock)', callback_data: `mock_send:${jobId}` }],
+          [{ text: 'Перегенерировать', callback_data: `mock_regenerate:${jobId}` }],
+          [{ text: 'Отклонить', callback_data: `mock_reject:${jobId}` }],
+        ],
     },
   };
 }

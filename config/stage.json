@@ -8,9 +8,9 @@
     "telegram_update_mode": "allowlisted_local_long_polling",
     "explicit_command_required": true,
     "model_default": "gpt-5.6-luna",
-    "personalization_mode_default": "optional",
+    "personalization_mode_default": "off",
     "universal_fallback": true,
-    "max_model_calls_per_draft": 3
+    "max_model_calls_per_draft": 0
   },
   "repository_default": {
     "mail_transport": "disabled",

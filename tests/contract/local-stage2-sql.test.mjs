@@ -20,12 +20,13 @@ test('local review callbacks use hashed one-time tokens and bounded regeneration
   assert.match(migration, /FUNCTION assert_job_status_transition[\s\S]*SET search_path = workoutreach, public/u);
 });
 
-test('local OpenAI use is guarded by an atomic daily analysis budget', () => {
+test('historical model budget remains guarded while the active bot exposes no OpenAI runtime', () => {
   assert.match(budgetMigration, /CREATE TABLE IF NOT EXISTS model_runs/u);
   assert.match(budgetMigration, /pg_advisory_xact_lock/u);
   assert.match(budgetMigration, /p_daily_analysis_limit NOT BETWEEN 1 AND 20/u);
   assert.match(localCompose, /DAILY_ANALYSIS_LIMIT: \$\{DAILY_ANALYSIS_LIMIT:-40\}/u);
-  assert.match(localCompose, /LOCAL_OPENAI_MAX_OUTPUT_TOKENS:-1200/u);
+  assert.match(localCompose, /OUTREACH_PERSONALIZATION_MODE: "off"/u);
+  assert.doesNotMatch(localCompose, /OPENAI_(?:MODE|MODEL|API_KEY|MAX_OUTPUT_TOKENS)|openai_api_key/u);
 });
 
 test('local bot has no public port and guarded SMTP stays disabled by default', () => {

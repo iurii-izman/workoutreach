@@ -5,7 +5,7 @@ const commands = [
   { command: 'start', description: 'Начать работу' },
   { command: 'next', description: 'Следующее требующее решения задание' },
   { command: 'queue', description: 'Очередь заданий по статусам' },
-  { command: 'usage', description: 'Анализы, токены и SMTP за сегодня' },
+  { command: 'usage', description: 'Очередь и SMTP за сегодня' },
   { command: 'email', description: 'Указать известный email для задания' },
   { command: 'approve', description: 'Повторно открыть подтверждение draft' },
   { command: 'help', description: 'Как пользоваться ботом' },
@@ -13,8 +13,8 @@ const commands = [
   { command: 'version', description: 'Версия рабочего контура' },
 ];
 const name = 'Workoutreach · Bitrix24';
-const description = 'Пришлите публичный URL сайта компании. Я найду опубликованные контакты и проверяемый факт, подготовлю персонализированный карьерный email и попрошу явное подтверждение перед отправкой.';
-const shortDescription = 'Проверяемый карьерный outreach для интеграторов Bitrix24 — только с human review.';
+const description = 'Пришлите публичный URL сайта компании. Я найду опубликованный email, подготовлю фиксированное карьерное письмо без OpenAI и попрошу явное подтверждение перед отправкой.';
+const shortDescription = 'Универсальный карьерный outreach для партнёров Bitrix24 — только с human review.';
 
 try {
   const allowedChatIds = parseIdAllowlist(process.env.ALLOWED_TELEGRAM_CHAT_IDS);

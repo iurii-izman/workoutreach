@@ -181,6 +181,14 @@ test('universal-only mode makes no model call and reserves no model budget', asy
   assert.equal(result.analysis.personalization_mode, 'UNIVERSAL_ONLY');
   assert.equal(result.analysis.fact, null);
   assert.equal(result.evidence.model_attempted, false);
+  assert.equal(result.evidence.model_call_count, 0);
+  assert.equal(result.draft.template_version, 'email-ru-career-v3');
+  assert.equal(result.draft.subject, 'Системный аналитик Bitrix24 — сотрудничество');
+  assert.match(result.draft.body_text, /^Добрый день!\s+Я системный и бизнес-аналитик с 6\+ годами/u);
+  assert.doesNotMatch(result.draft.body_text, /\{\{|Казахстан/u);
+  assert.match(result.telegram_preview.text, /Фиксированное универсальное письмо · OpenAI-вызовы: 0/u);
+  assert.equal(result.telegram_preview.reply_markup.inline_keyboard.length, 2);
+  assert.doesNotMatch(JSON.stringify(result.telegram_preview.reply_markup), /regenerate/u);
 });
 
 test('retry reuses a previously verified fact, revalidates its evidence and calls only the phrase model', async () => {

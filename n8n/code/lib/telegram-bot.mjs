@@ -3,24 +3,24 @@ import { makeJobId } from './pipeline.mjs';
 import { normalizeUrl } from './url-policy.mjs';
 
 export const BOT_COPY = Object.freeze({
-  start: 'Добрый день! Я готовлю проверяемые персонализированные письма для карьерного обращения к интеграторам Bitrix24.\n\nПришлите одним сообщением только публичный URL сайта компании. Я проверю сайт, опубликованный контакт, факт, персональную фразу и верну полный preview.\n\nEmail-отправка пока отключена: кнопка «Отправить» работает только как безопасная проверка.',
-  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. Дождитесь подтверждения с номером задания.\n3. Проверьте компанию, адресата, источник, фразу и полный текст письма.\n4. «Перегенерировать» создаёт новый вариант (не более двух раз).\n5. «Отправить» не отправляет email — текущий этап физически заблокирован.\n\nКоманды: /status — состояние безопасности, /version — версия контура.',
-  status: 'Статус: бот активен.\nOpenAI: guarded live evaluation.\nTelegram: allowlisted private chat.\nCV: проверяется перед каждым анализом.\nEmail: ОТКЛЮЧЁН.\nOutbox: отсутствует.\nАвтоматическая отправка: невозможна.',
-  version: 'Workoutreach stage 1 · guarded live preview · email disabled',
+  start: 'Добрый день! Я нахожу опубликованный email на сайте компании и готовлю фиксированное универсальное письмо для проверки.\n\nПришлите одним сообщением только публичный URL сайта. OpenAI не используется.\n\nEmail-отправка пока отключена: кнопка «Отправить» работает только как безопасная проверка.',
+  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. Дождитесь подтверждения с номером задания.\n3. Проверьте адресата, источник и полный неизменяемый текст письма.\n4. «Отправить» не отправляет email — текущий этап физически заблокирован.\n\nКоманды: /status — состояние безопасности, /version — версия контура.',
+  status: 'Статус: бот активен.\nКонтент: фиксированное универсальное письмо.\nOpenAI: отключён, ключ не смонтирован.\nTelegram: allowlisted private chat.\nCV: проверяется перед каждым анализом.\nEmail: ОТКЛЮЧЁН.\nOutbox: отсутствует.\nАвтоматическая отправка: невозможна.',
+  version: 'Workoutreach universal-only · guarded live preview · email disabled',
 });
 
 const STAGE2_COPY = Object.freeze({
-  start: 'Добрый день! Я готовлю проверяемые персонализированные письма для карьерного обращения к интеграторам Bitrix24.\n\nПришлите одним сообщением только публичный URL сайта компании. Задание, evidence, черновик и действия сохраняются в локальном PostgreSQL и переживают перезапуск.\n\nEmail-отправка физически отключена: «Отправить» создаёт только локальную mock-запись.',
-  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. При нескольких email выберите опубликованный адрес кнопкой; известный адрес: /email WO-XXXXXX name@example.com.\n3. Проверьте preview. «Перегенерировать» создаёт новую immutable-версию (максимум две).\n4. «Отправить» создаёт только mock-outbox: email не передаётся наружу.\n\nКоманды: /next, /queue, /usage, /status [WO-XXXXXX], /help, /version.',
-  status: 'Статус: локальный Stage 2 активен.\nOpenAI: guarded live evaluation только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: ОТКЛЮЧЁН.\nOutbox: только mock.\nПубличный сервер и webhook: отсутствуют.',
-  version: 'Workoutreach local stage 2 · PostgreSQL-backed review · mock outbox · email disabled',
+  start: 'Добрый день! Я нахожу опубликованный email на сайте компании и готовлю фиксированное универсальное письмо. Задание, источник контакта, черновик и действия сохраняются в локальном PostgreSQL. OpenAI не используется.\n\nEmail-отправка физически отключена: «Отправить» создаёт только локальную mock-запись.',
+  help: 'Как пользоваться:\n\n1. Пришлите один URL вида https://company.example/\n2. При нескольких email выберите опубликованный адрес кнопкой; известный адрес: /email WO-XXXXXX name@example.com.\n3. Проверьте адресата, источник и неизменяемый текст письма.\n4. «Отправить» создаёт только mock-outbox: email не передаётся наружу.\n\nКоманды: /next, /queue, /usage, /status [WO-XXXXXX], /help, /version.',
+  status: 'Статус: локальный Stage 2 активен.\nКонтент: фиксированное универсальное письмо.\nOpenAI: отключён, ключ не смонтирован.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: ОТКЛЮЧЁН.\nOutbox: только mock.\nПубличный сервер и webhook: отсутствуют.',
+  version: 'Workoutreach local stage 2 · universal-only · PostgreSQL-backed review · email disabled',
 });
 
 const SMTP_COPY = Object.freeze({
-  start: 'Добрый день! Пришлите одним сообщением публичный URL сайта компании. Я сохраню evidence и черновик в локальном PostgreSQL. После полного preview кнопка «Отправить email» потребует одно явное подтверждение.',
-  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Если найдено несколько email — выберите опубликованный адрес кнопкой.\n3. Известный адрес можно указать явно: /email WO-XXXXXX name@example.com. Он будет помечен manual.\n4. Проверьте evidence и полный текст, затем подтвердите отправку.\n5. Ошибка персонализации не блокирует универсальный черновик. Для FAILED используйте /retry WO-XXXXXX.\n6. Автоматического retry после неизвестного SMTP-результата нет.\n\nКоманды: /next, /queue, /usage, /retry WO-XXXXXX, /status [WO-XXXXXX], /approve WO-XXXXXX, /help, /version.',
-  status: 'Статус: локальная отправка включена.\nOpenAI: только по вашему URL.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: SMTP с ручным подтверждением.\nАвтоповтор: отключён.\nПубличный webhook: отсутствует.',
-  version: 'Workoutreach guarded SMTP · PostgreSQL-backed review · human approval',
+  start: 'Добрый день! Пришлите одним сообщением публичный URL сайта компании. Я найду опубликованный email и подготовлю фиксированное универсальное письмо без OpenAI. После полного preview кнопка «Отправить email» потребует одно явное подтверждение.',
+  help: 'Как пользоваться:\n\n1. Пришлите один публичный URL.\n2. Если найдено несколько email — выберите опубликованный адрес кнопкой.\n3. Известный адрес можно указать явно: /email WO-XXXXXX name@example.com. Он будет помечен manual.\n4. Проверьте адресата, источник и полный неизменяемый текст, затем подтвердите отправку.\n5. Для FAILED используйте /retry WO-XXXXXX.\n6. Автоматического retry после неизвестного SMTP-результата нет.\n\nКоманды: /next, /queue, /usage, /retry WO-XXXXXX, /status [WO-XXXXXX], /approve WO-XXXXXX, /help, /version.',
+  status: 'Статус: локальная отправка включена.\nКонтент: фиксированное универсальное письмо.\nOpenAI: отключён, ключ не смонтирован.\nTelegram: allowlisted long polling.\nСостояние: PostgreSQL.\nEmail: SMTP с ручным подтверждением.\nАвтоповтор: отключён.\nПубличный webhook: отсутствует.',
+  version: 'Workoutreach universal-only · guarded SMTP · PostgreSQL-backed review · human approval',
 });
 
 function updateIdentity(update) {
@@ -85,17 +85,18 @@ async function withTyping(client, chatId, task) {
 }
 
 function stage2Preview(preview, callbacks, mailEnabled = false) {
+  const buttons = [
+    [{ text: mailEnabled ? 'Отправить email' : 'Отправить (mock)', callback_data: callbacks.send }],
+  ];
+  if (callbacks.regenerate) buttons.push([{ text: 'Перегенерировать', callback_data: callbacks.regenerate }]);
+  buttons.push([{ text: 'Отклонить', callback_data: callbacks.reject }]);
   return {
     ...preview,
     text: mailEnabled
       ? preview.text.replace('ГОТОВО К ПРОВЕРКЕ (DRY-RUN)', 'ГОТОВО К ПРОВЕРКЕ')
       : preview.text,
     reply_markup: {
-      inline_keyboard: [
-        [{ text: mailEnabled ? 'Отправить email' : 'Отправить (mock)', callback_data: callbacks.send }],
-        [{ text: 'Перегенерировать', callback_data: callbacks.regenerate }],
-        [{ text: 'Отклонить', callback_data: callbacks.reject }],
-      ],
+      inline_keyboard: buttons,
     },
   };
 }
@@ -160,7 +161,7 @@ export function createTelegramBotHandler({ client, allowlist, analyze, stateStor
     }
     if (!stateStore) jobs.set(jobId, { inputUrl, regeneration, status: 'ANALYZING', createdAt: now() });
     try {
-      await client.sendText(chatId, `${regeneration ? 'Перегенерация' : 'Принято'} · #${jobId}\nПроверяю сайт, опубликованные контакты и evidence. Обычно это занимает до минуты.`);
+      await client.sendText(chatId, `${regeneration ? 'Повторная проверка' : 'Принято'} · #${jobId}\nПроверяю сайт и опубликованные контакты. Формирую фиксированное письмо без OpenAI. Обычно это занимает до минуты.`);
       const result = await withTyping(client, chatId, () => analyze({
         inputUrl,
         seed,

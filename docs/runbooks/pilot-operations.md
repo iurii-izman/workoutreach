@@ -15,17 +15,17 @@ This runbook covers the first owner-operated evaluation and gradual delivery per
 
 1. Send one public company URL to the bot.
 2. If Telegram presents contacts, verify category and source. Do not use a protected mailbox. If no email is published, use `/email WO-XXXXXX address` only when the address is independently and reliably known.
-3. Verify company identity, recipient, literal fact, source URL/excerpt, personalization phrase, subject, full fixed template and CV attachment.
-4. Reject and resubmit/regenerate when any claim is unclear. A polished sentence is not a substitute for evidence.
+3. Verify recipient, published/manual source, fixed subject and body, and CV attachment.
+4. Reject the job when the recipient or source is unsuitable; the fixed letter has no regeneration action.
 5. Approve the immutable draft once. Gmail SMTP acceptance means only that Gmail accepted the message; it does not prove inbox delivery or reading.
 
 ## Fifty-company evaluation and send ramp
 
-- Complete up to 50 analyses/manual reviews as the quality dataset; record false company matches, weak evidence, unsuitable contacts and phrase edits.
+- Complete up to 50 contact/draft reviews as the quality dataset; record unsuitable contacts, source failures, bounces and replies.
 - Do not interpret the 30/day technical ceiling as a target.
 - Start real delivery at no more than 5 reviewed messages in a day. Increase to 10, then 20 only after manual inspection of replies and failure signals. Stay below 30/day.
 - Stop the ramp on any complaint, repeated permanent bounce, unexpected duplicate, wrong-company evidence, recipient-policy mistake or Gmail restriction.
-- Do not expand beyond Kazakhstan Bitrix24 integrators until the target/legal/provider scope is explicitly updated.
+- Expansion to other countries requires recipient-purpose, local-law and provider review; the fixed Russian text should be used only where Russian is appropriate for the recipient.
 
 ## End of session
 

@@ -21,8 +21,9 @@ function renderOne(template, values, manifest, html = false) {
   });
 }
 
-export async function loadTemplate(root) {
-  const base = join(root, 'templates/email/ru/v2');
+export async function loadTemplate(root, version = 'v3') {
+  if (!['v2', 'v3'].includes(version)) throw new SafeStop('TEMPLATE_VERSION_INVALID', 'Unsupported career template version');
+  const base = join(root, `templates/email/ru/${version}`);
   const [manifestRaw, subject, bodyText, bodyHtml] = await Promise.all([
     readFile(join(base, 'manifest.json'), 'utf8'),
     readFile(join(base, 'subject.txt'), 'utf8'),
@@ -30,14 +31,26 @@ export async function loadTemplate(root) {
     readFile(join(base, 'body.html'), 'utf8'),
   ]);
   const manifest = JSON.parse(manifestRaw);
-  if (manifest.allowed_placeholders.length !== 1 || manifest.allowed_placeholders[0] !== 'OPENING_PARAGRAPH') {
-    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Career template may expose only the reviewed opening paragraph placeholder');
+  if (!Array.isArray(manifest.allowed_placeholders) || !Array.isArray(manifest.required_placeholders)) {
+    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Career template placeholder policy is invalid');
   }
   if (typeof manifest.universal_opening !== 'string' || manifest.universal_opening.length < 40 || /[\r\n]/u.test(manifest.universal_opening)) {
     throw new SafeStop('TEMPLATE_UNIVERSAL_OPENING_INVALID', 'Career template requires one owner-approved universal opening paragraph');
   }
+  const combined = `${subject}\n${bodyText}\n${bodyHtml}`;
+  const found = [...combined.matchAll(PLACEHOLDER)].map((match) => match[1]);
+  if (manifest.content_policy === 'fixed_universal_no_placeholders') {
+    if (manifest.allowed_placeholders.length !== 0 || manifest.required_placeholders.length !== 0 || found.length !== 0) {
+      throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Fixed universal template must not expose placeholders');
+    }
+    if (!bodyText.includes(manifest.universal_opening) || !bodyHtml.includes(manifest.universal_opening)) {
+      throw new SafeStop('TEMPLATE_UNIVERSAL_OPENING_INVALID', 'Fixed universal opening must be literal in both body variants');
+    }
+  } else if (manifest.allowed_placeholders.length !== 1 || manifest.allowed_placeholders[0] !== 'OPENING_PARAGRAPH') {
+    throw new SafeStop('TEMPLATE_PLACEHOLDER_POLICY', 'Personalization-capable template may expose only the reviewed opening paragraph placeholder');
+  }
   for (const required of manifest.required_placeholders) {
-    if (!`${subject}\n${bodyText}\n${bodyHtml}`.includes(`{{${required}}}`)) {
+    if (!combined.includes(`{{${required}}}`)) {
       throw new SafeStop('TEMPLATE_PLACEHOLDER_MISSING', 'Template set is missing a required placeholder', { required });
     }
   }
